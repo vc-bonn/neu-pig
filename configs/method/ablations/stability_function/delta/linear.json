@@ -1,0 +1,28 @@
+{
+    "descriptor": "surface",
+    "time_encoding": "fourier_features2",
+    "rotation_method": "quaternions",
+    "optimization": {
+        "epochs": 1000,
+        "edgeloss": 100,
+        "time_smoothing":"pdg",
+        "catchup_scaling": "linear"
+    },
+    "grid": {
+        "base_res": 2,
+        "increase_per_level": 3,
+        "n_level": 8,
+        "lr_adapt": 2.5,
+        "local_lambda_adapt": 1.5,
+        "neighbours": 3,
+        "smoothness": 0.4,
+        "lr": 0.005,
+        "solver": "CG"
+    },
+    "mlp": {
+        "hidden": 512,
+        "layers": 3,
+        "point_dim": 30,
+        "time_dim": 8,
+        "normal_dim": 2
+    }}

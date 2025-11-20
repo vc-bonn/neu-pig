@@ -1,0 +1,27 @@
+{
+    "descriptor": "surface",
+    "time_encoding":"fourier_features2",
+    "rotation_method":"exp",
+    "optimization": {
+        "epochs": 250,
+        "edgeloss": 250
+    },
+    "grid": {
+        "base_res": 2,
+        "increase_per_level": 4,
+        "n_level": 8,
+        "lr_adapt": 2.0,
+        "local_lambda_adapt": 1.25,
+        "neighbours": 3,
+        "smoothness": 0.25,
+        "lr": 0.005,
+        "solver": "CG"
+    },
+    "mlp": {
+        "hidden": 512,
+        "layers": 3,
+        "point_dim": 30,
+        "time_dim": 8,
+        "normal_dim": 2
+    }
+}
