@@ -76,12 +76,7 @@ To download the preprocessed data, see the data section of [Dynosurf](https://gi
 ## RUNS
 All run configs are predefined in configs/method/runs. For the ablation study see the configs/method/ablations path. Alter the path arguments accordingly [-o / -dp]. To create the extended AMA dataset, without sequences in the range of 40-120 frames, see src/io/dataset/process_ama_dataset.py.
 
-For the chained execution we supply a run.py script.
-``` 
-[AMA] python configs/method/runs/run_ama.py
-[DT4D] python configs/method/runs/run_dt4d.py
-[DFAUST] python configs/method/runs/run_dfaust.py
-```
+For the chained execution we supply a ```run.py``` script.
 
 To run the initialization methods from DynoSurf or Motion2VecSets, make sure to install their required packages. For Motion2VecSets, we recommend creating a separate conda environment with the appropriate Python version to avoid version conflicts. For the execution of DynoSurf, please refer to their [repository](https://github.com/yaoyx689/DynoSurf), or execute src/related_work/run_dynosurf.py.
 Paths need to be altered according to your setup.
