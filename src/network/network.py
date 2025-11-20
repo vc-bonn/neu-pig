@@ -1,6 +1,8 @@
 import torch
-from src.geometry.time_encodings import *
-from src.geometry.network_base import MLP, Encoder_Decoder
+from src.network.time_encodings import *
+from src.network.network_base import MLP, Encoder_Decoder
+
+
 class Network(torch.nn.Module):
     def __init__(
         self,
@@ -20,9 +22,16 @@ class Network(torch.nn.Module):
         in_dim = point_dim + time_dim
 
         if network == "mlp":
-            self.network = MLP(input_dim=in_dim, hidden=hidden, layers=layers, outdim=outdim)
+            self.network = MLP(
+                input_dim=in_dim, hidden=hidden, layers=layers, outdim=outdim
+            )
         elif network == "encoder_decoder":
-            self.network = Encoder_Decoder(encoder_layers=layers, decoder_layers=layers, input_dim=in_dim, outdim=outdim)
+            self.network = Encoder_Decoder(
+                encoder_layers=layers,
+                decoder_layers=layers,
+                input_dim=in_dim,
+                outdim=outdim,
+            )
 
         assert time_dim % 2 == 0
         if time_encoding == "random_fourier":

@@ -77,10 +77,7 @@ if __name__ == "__main__":
     if args.verbose:
         console.log("IO Arguments:\n {} \n".format(args.io_args))
         console.log("Method Arguments:\n {} \n".format(args.method_args))
-    if args.debug:
-        from src.opt_run_debug import Opt_Run
-    else:
-        from src.opt_run import Opt_Run
+    from src.opt_run import Opt_Run
 
     o = Opt_Run(args)
     o.run()

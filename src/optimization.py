@@ -10,7 +10,7 @@ from src.utilities.util import edgelength
 from pytorch3d.structures import Meshes
 from src.io.datasets import optimization_dataset
 from pytorch3d.transforms import so3_exp_map, quaternion_to_matrix
-from src.geometry.network import Network
+from src.network.network import Network
 import matplotlib.pyplot as plt
 import os
 from PIL import Image

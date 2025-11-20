@@ -3,7 +3,7 @@
     "time_encoding": "fourier_features2",
     "rotation_method": "quaternions",
     "optimization": {
-        "epochs": 2000,
+        "epochs": 1000,
         "edgeloss":100,
         "time_smoothing":"pdg" ,
         "catchup_scaling": "pdg"

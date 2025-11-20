@@ -9,7 +9,7 @@ import copy
 from pathlib import Path
 from pcgrid.value_wrapper import ValueWrapper
 from pytorch3d.structures import Meshes
-from src.geometry.geometry_utils import compute_keyframe, init_surf, scale_and_save
+from src.network.geometry_utils import compute_keyframe, init_surf, scale_and_save
 from src.utilities.eval_utils import eval_meshes, get_loc_scale
 import json
 import datetime
@@ -29,7 +29,10 @@ class Opt_Run:
         self.args = args
 
     def run(self) -> None:
-        self._run_directory()
+        if self.args.debug:
+            self._run_directory_debug()
+        else:
+            self._run_directory()
 
     def _run_directory(self) -> None:
         if self.args.io_args["directory_path"][-1] != "/":
@@ -191,6 +194,57 @@ class Opt_Run:
             for i, thread in enumerate(threads):
                 thread.join()
 
+    def _run_directory_debug(self) -> None:
+        if self.args.io_args["directory_path"][-1] != "/":
+            self.args.io_args["directory_path"] = (
+                self.args.io_args["directory_path"] + "/"
+            )
+        directories = os.listdir(self.args.io_args["directory_path"])
+        path = self.args.io_args["base_out_path"]
+        now = datetime.datetime.now()
+        self.args.io_args["out_path"] = os.path.join(
+            path, now.strftime("Date%Y-%m-%d_Time%H-%M-%S")
+        )
+        self.args.io_args["base_out_path"] = os.path.join(
+            path, now.strftime("Date%Y-%m-%d_Time%H-%M-%S")
+        )
+        Path.mkdir(Path(self.args.io_args["out_path"]), parents=True, exist_ok=True)
+
+        args_list = []
+        for directory in directories:
+
+            args = copy.deepcopy(self.args)
+            args.io_args["input_directory"] = (
+                args.io_args["directory_path"] + directory + "/"
+            )
+            args.io_args["directory"] = directory
+            args.io_args["out_path"] = os.path.join(
+                args.io_args["base_out_path"], directory
+            )
+
+            Path.mkdir(Path(args.io_args["out_path"]), parents=True, exist_ok=True)
+            args.state = {
+                "data": False,
+                "init": False,
+                "opt": False,
+                "eval": False,
+                "device": None,
+            }
+            args_list.append(args)
+
+        ctx = mp.Manager()
+        q_data = ctx.Queue()
+        q_init = ctx.Queue()
+        q_opts = ctx.Queue()
+        q_outs = ctx.Queue()
+        q_progress = ctx.Queue()
+
+        prepare_data(args_list, q_data, q_progress)
+        init_surface(q_data, q_init, q_progress)
+        opt(q_init, q_opts, q_progress, self.args.devices[0])
+        output(q_opts, q_outs, q_progress)
+        eval(q_outs, q_progress)
+
 
 def prepare_data(args_list: list[dict], out_q: Queue, q_progress: Queue):
 
@@ -291,6 +345,7 @@ def opt(in_q: Queue, out_q: Queue, q_progress: Queue, device: str):
             continue
         if args == "done":
             q_progress.put("opt done")
+            out_q.put(["done", None, None])  # Tell the other processes to also stop
             break
         args.device = device
 
@@ -359,8 +414,8 @@ def opt(in_q: Queue, out_q: Queue, q_progress: Queue, device: str):
             out_q.put([args, data, meshes])
             q_progress.put("opt")
         except:
+            out_q.put(["done", None, None])  # Tell the other processes to also stop
             break
-    in_q.put(["done", None, None, None])  # Tell the other processes to also stop
 
 
 def output(in_q: Queue, out_q: Queue, q_progress: Queue):
