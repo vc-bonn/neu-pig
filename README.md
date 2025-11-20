@@ -44,7 +44,7 @@ pip install "git+https://github.com/facebookresearch/pytorch3d.git"
 ## Main.py Arguments
 ```
 python Main.py --...
-[-m / --methocConfig] - Path to the method config file (str)
+[-m / --methodConfig] - Path to the method config file (str)
 [-se / --seed] - random seed (int)
 [-d / --device] - cuda device number (int)
 [-t / --target] - which target type to use. If pcl is chosen, make sure that the directory path is as configured in the AMA dataset. ("pcl"/"obj")
@@ -52,6 +52,7 @@ python Main.py --...
 [-o / --out_path] - output directory (str)
 [-dp / --directory_path] - path to the input objects, see PATH-STRUCTURE section (str)
 [-s / --skip] - how many objects to skip (int)
+[-ns / --noise] - standard deviation of gaussian noise added to target points (float)
 ```
 
 ## PATH-STRUCTURE
