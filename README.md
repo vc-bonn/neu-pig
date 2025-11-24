@@ -17,7 +17,7 @@
     </p>
     <h3 align="center">CVPR 2026</h3>
     <h3 align="center">
-        <a href="https://arxiv.org/abs/2509.18097">Paper (arxiv)</a>
+        <a "https://arxiv.org/abs/2509.18097">Paper (arxiv)</a>
 		</h3>
     <div align="center"></div>
 </p>
@@ -78,6 +78,6 @@ All run configs are predefined in configs/method/runs. For the ablation study se
 
 For the chained execution we supply a ```run.py``` script.
 
-To run the initialization methods from DynoSurf or Motion2VecSets, make sure to install their required packages. For Motion2VecSets, we recommend creating a separate conda environment with the appropriate Python version to avoid version conflicts. For the execution of DynoSurf, please refer to their [repository](https://github.com/yaoyx689/DynoSurf), or execute src/related_work/run_dynosurf.py.
+To run the initialization methods from DynoSurf or Motion2VecSets, make sure to install their required packages. For Motion2VecSets, we recommend creating a separate conda environment with the appropriate Python version to avoid version conflicts. For the execution of DynoSurf, please refer to their [repository](https://github.com/yaoyx689/DynoSurf), or execute ```src/related_work/run_dynosurf.py```.
 Paths need to be altered according to your setup.
 
