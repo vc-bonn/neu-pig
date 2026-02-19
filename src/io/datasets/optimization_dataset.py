@@ -18,14 +18,10 @@ class OptimizationDataset(Dataset):
         return self.args.io_args
 
     def __len__(self) -> int:
-        if self.args.sequence:
-            return 1
         return self.points.shape[0]
 
     def __getitem__(self, index) -> dict:
         self.epochs += 1
-        if self.args.sequence:
-            index = self.epochs // 30
 
         return {
             "target": self.points[index],

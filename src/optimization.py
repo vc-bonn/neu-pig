@@ -111,7 +111,7 @@ class Optimization(torch.nn.Module):
         v: torch.Tensor,
         f: torch.Tensor,
         data: dict,
-        evaluate=False,
+        limit=None,
     ):
 
         time = data["target_index"].squeeze() / data["target_index"].max()
@@ -138,7 +138,7 @@ class Optimization(torch.nn.Module):
             }
 
             point_grid, normal_grid = grids
-            point_values = point_grid(point_input)
+            point_values = point_grid(point_input, limit=limit)
             normal_values = normal_grid(normal_input)
             network_input = torch.cat(
                 (point_values["Network"], normal_values["Network"]), dim=-1
@@ -185,30 +185,9 @@ class Optimization(torch.nn.Module):
         faces: torch.Tensor,
         data: dict,
         q_progress: Queue,
-        vis=False,
     ):
         dataset = optimization_dataset.OptimizationDataset(self.args, data)
         dataloader = DataLoader(dataset=dataset, batch_size=1000, shuffle=False)
-
-        self.args.trainable_parameter_mlp = sum(
-            p.numel() for p in self.mlp.parameters() if p.requires_grad
-        )
-        g0 = sum(
-            p.numel()
-            for grid in grids[0].wrappers[0].grid.grids
-            for p in grid.parameters()
-            if p.requires_grad
-        )
-        g1 = sum(
-            p.numel()
-            for grid in grids[1].wrappers[0].grid.grids
-            for p in grid.parameters()
-            if p.requires_grad
-        )
-        self.args.trainable_parameter_grid = g0 + g1
-        self.args.trainable_parameter_total = (
-            self.args.trainable_parameter_mlp + self.args.trainable_parameter_grid
-        )
 
         for epoch in range(self.epochs):
             for data in dataloader:
@@ -241,45 +220,15 @@ class Optimization(torch.nn.Module):
                 q_progress.put(
                     f"{self.args.device};{cd_smoothed.detach().cpu().item()};{regularization.detach().cpu().item()};{self.args.io_args['directory']};{epoch+1}"
                 )
-
-        if self.args.sequence:
-            data = {
-                "points": dataset.points,
-                "target_index": torch.arange(dataset.points.shape[0]),
-            }
-            transformed_points, _ = self.forward_prediction(
-                grids, vertices, faces, data, evaluate=True
-            )
-        if vis:
-            with torch.no_grad():
-                from paper.teaser import parameterize
-                import tempfile
-                from pytorch3d.io import save_obj
-
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    mesh_tmp_path = os.path.join(tmpdirname, "temp_mesh.obj")
-                    save_obj(
-                        mesh_tmp_path, vertices.detach().cpu(), faces.detach().cpu()
-                    )
-                    uvs, vertices, faces = parameterize(mesh_tmp_path)
-
-                uvs = torch.from_numpy(uvs).to(self.args.device).to(torch.float32)
-                vertices = (
-                    torch.from_numpy(vertices).to(self.args.device).to(torch.float32)
-                )
-                faces = torch.from_numpy(faces).to(self.args.device).to(torch.int64)
-                transformed_points, _ = self.forward_prediction(
-                    grids, vertices, faces, data
-                )
-
-            meshes = Meshes(
-                verts=transformed_points.detach().cpu(),
+        meshes_per_grid_level = [
+            Meshes(
+                verts=self.forward_prediction(
+                    grids, vertices, faces, data, limit=l + 1
+                )[0]
+                .detach()
+                .cpu(),
                 faces=faces.cpu().repeat(transformed_points.shape[0], 1, 1),
             )
-            return meshes, uvs
-        else:
-            meshes = Meshes(
-                verts=transformed_points.detach().cpu(),
-                faces=faces.cpu().repeat(transformed_points.shape[0], 1, 1),
-            )
-            return meshes
+            for l in range(self.args.method_args["grid"]["n_level"])
+        ]
+        return meshes_per_grid_level

@@ -307,12 +307,9 @@ def init_surface(in_q: Queue, out_q: Queue, q_progress: Queue):
         #####
         # Keyframe Selection
         #####
-        if args.sequence:
-            args.method_args["keyframe_index"] = 0
-        else:
-            args.method_args["keyframe_index"] = compute_keyframe(
-                target_points.squeeze(), method=args.keyframe
-            )
+        args.method_args["keyframe_index"] = compute_keyframe(
+            target_points.squeeze(), method=args.keyframe
+        )
 
         #####
         # Initial Mesh
@@ -431,7 +428,7 @@ def output(in_q: Queue, out_q: Queue, q_progress: Queue):
         except:
             continue
         if args == "done":
-            out_q.put(["done", data, meshes, loc_scales])
+            out_q.put(["done", None, None, None])
             break
 
         gt_meshes = Meshes(

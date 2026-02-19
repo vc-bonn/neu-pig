@@ -1,14 +1,108 @@
 import os
 import torch.multiprocessing as mp
 
-AMA_PATH = "/data/kaltheuner/preprocessed-data/AMA"
-DFAUST_PATH = "/data/kaltheuner/preprocessed-data/DFAUST"
-DT4D_PATH = "/data/kaltheuner/preprocessed-data/DT4D"
+import argparse
+from pathlib import Path
 
-OUT_BASE = "/data/kaltheuner/CVPR_2026"
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--AMA_PATH", type=str, default="/data/kaltheuner/preprocessed-data/AMA"
+)
+parser.add_argument(
+    "--DFAUST_PATH", type=str, default="/data/kaltheuner/preprocessed-data/DFAUST"
+)
+parser.add_argument(
+    "--DT4D_PATH", type=str, default="/data/kaltheuner/preprocessed-data/DT4D"
+)
+parser.add_argument("--OUT_BASE", type=str, default="/data/kaltheuner/CVPR_2026")
+parser.add_argument(
+    "--DEFAULT_METHOD_CONFIG",
+    type=str,
+    default="configs/method/fit_.json",
+)
 
-DEFAULT_METHOD_CONFIG = "configs/method/fit_.json"
+parser.add_argument("--devices", type=str, nargs="+", default=[0])
 
+parser.add_argument(
+    "--runs_default",
+    action="store_true",
+    help="Run default experiments [Figure 3 & Table 1]",
+)
+parser.add_argument(
+    "--ablations_epochs",
+    action="store_true",
+    help="Run ablation experiments for number of epochs [Figure 4 & Table 11]",
+)
+parser.add_argument(
+    "--ablations_timesteps",
+    action="store_true",
+    help="Run ablation experiments for number of epochs [Figure 5 & Table 2]",
+)
+parser.add_argument(
+    "--ablations_hash_encoding",
+    action="store_true",
+    help="Run ablation experiments for the hash encoding [Table 3]",
+)
+parser.add_argument(
+    "--ablations_time_encoding",
+    action="store_true",
+    help="Run ablation experiments for the time encoding [Table 4]",
+)
+parser.add_argument(
+    "--ablations_method",
+    action="store_true",
+    help="Run ablation experiments for the method [Table 3]",
+)
+parser.add_argument(
+    "--ablations_stability_delta",
+    action="store_true",
+    help="Run ablation experiments for the stability delta [Table 5]",
+)
+parser.add_argument(
+    "--ablations_stability_confidence",
+    action="store_true",
+    help="Run ablation experiments for the stability confidence [Table 5]",
+)
+parser.add_argument(
+    "--ablations_grid_levels",
+    action="store_true",
+    help="Run ablation experiments for the number of grid levels [Figure 6 & Table 6]",
+)
+parser.add_argument(
+    "--ablations_smoothness_weight",
+    action="store_true",
+    help="Run ablation experiments for grid smoothness weight(lambda) [Figure 7 & Table 7]",
+)
+parser.add_argument(
+    "--ablations_noise",
+    action="store_true",
+    help="Run ablation experiments for the input noise [Table 8]",
+)
+parser.add_argument(
+    "--ablations_resolution",
+    action="store_true",
+    help="Run ablation experiments for the number of point samples [Table 9]",
+)
+parser.add_argument(
+    "--ablations_mlp_design",
+    action="store_true",
+    help="Run ablation experiments for the mlp design [Table 10]",
+)
+parser.add_argument(
+    "--ablations_rotations",
+    action="store_true",
+    help="Run ablation experiments for the rotation definitions [Table 11]",
+)
+args = parser.parse_args()
+
+
+AMA_PATH = args.AMA_PATH
+DFAUST_PATH = args.DFAUST_PATH
+DT4D_PATH = args.DT4D_PATH
+
+OUT_BASE = args.OUT_BASE
+
+DEFAULT_METHOD_CONFIG = args.DEFAULT_METHOD_CONFIG
 
 if __name__ == "__main__":
     mp.set_start_method("spawn")
@@ -32,7 +126,6 @@ if __name__ == "__main__":
     # Ablations
     ###
     # epochs
-    from pathlib import Path
 
     EPOCHS_PATH = Path("configs/method/ablations/epochs")
     json_files = sorted(EPOCHS_PATH.glob("*.json"), key=lambda x: int(x.stem))
@@ -352,18 +445,18 @@ if __name__ == "__main__":
             OUT_BASE
         )
         + AMA_PATH,
-        # "python Main.py --target obj -np 5000 -o {}/supplemental/lambda_weight/low -m configs/method/supplemental/lambda_weight/low.json --directory_path ".format(
-        #     OUT_BASE
-        # )
-        # + AMA_PATH,
-        # "python Main.py --target obj -np 5000 -o {}/supplemental/lambda_weight/high -m configs/method/supplemental/lambda_weight/high.json --directory_path ".format(
-        #     OUT_BASE
-        # )
-        # + AMA_PATH,
-        # "python Main.py --target obj -np 5000 -o {}/supplemental/lambda_weight/very_high -m configs/method/supplemental/lambda_weight/very_high.json --directory_path ".format(
-        #     OUT_BASE
-        # )
-        # + AMA_PATH,
+        "python Main.py --target obj -np 5000 -o {}/supplemental/lambda_weight/low -m configs/method/supplemental/lambda_weight/low.json --directory_path ".format(
+            OUT_BASE
+        )
+        + AMA_PATH,
+        "python Main.py --target obj -np 5000 -o {}/supplemental/lambda_weight/high -m configs/method/supplemental/lambda_weight/high.json --directory_path ".format(
+            OUT_BASE
+        )
+        + AMA_PATH,
+        "python Main.py --target obj -np 5000 -o {}/supplemental/lambda_weight/very_high -m configs/method/supplemental/lambda_weight/very_high.json --directory_path ".format(
+            OUT_BASE
+        )
+        + AMA_PATH,
     ]
 
     supls_noise = [
@@ -384,7 +477,32 @@ if __name__ == "__main__":
         )
         + AMA_PATH,
     ]
-    # configs = configs_epochs + configs_grid_lvl + configs_resolutions + configs_length + configs_time + configs_mlp + configs_rotations +configs_stability_delta
-    configs = supls_grid_lvl
+
+    configs = []
+    if args.runs_default:
+        configs += configs_runs
+    if args.ablations_epochs:
+        configs += configs_epochs
+    if args.ablations_resolution:
+        configs += configs_resolutions
+    if args.ablations_timesteps:
+        configs += configs_length
+    if args.ablations_time_encoding:
+        configs += configs_time
+    if args.ablations_method:
+        configs += configs_method
+    if args.ablations_hash_encoding:
+        configs += configs_instant_ngp
+    if args.ablations_stability_delta:
+        configs += configs_stability_delta
+    if args.ablations_stability_confidence:
+        configs += configs_stability_confidence
+    if args.ablations_mlp_design:
+        configs += configs_mlp
+    if args.ablations_rotations:
+        configs += configs_rotations
+
+    devices = " ".join(map(str, args.devices))
     for c in configs:
-        os.system(c + " --device 0 1 2 3 4 7 6")
+        print(f"Running: {c} on devices {devices}")
+        os.system(f"{c} --device {devices}")

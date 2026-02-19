@@ -15,20 +15,19 @@ parser.add_argument(
     help="Method config file",
 )
 parser.add_argument("-se", "--seed", type=int, default=0)
-parser.add_argument("-d", "--devices", type=str, nargs="+", default=[0])
+parser.add_argument("-d", "--devices", type=str, nargs="+", default=[0, 1, 2, 3, 4])
 parser.add_argument("-t", "--target", type=str, default="obj")
 parser.add_argument("-np", "--number_points", type=int, default=5000)
 parser.add_argument("-o", "--out_path", type=str, default="test")
 parser.add_argument("-i", "--init", type=str, default="ours")
 parser.add_argument("-k", "--keyframe", type=str, default="ours")
 parser.add_argument("-ngp", "--instant_ngp", action="store_true")
-parser.add_argument("-seq", "--sequence", action="store_true")
 parser.add_argument("-ns", "--noise", type=float, default=0)
 parser.add_argument(
     "-dp",
     "--directory_path",
     type=str,
-    default="/data/plack/neupig/teaser_objects/",
+    default="/data/kaltheuner/preprocessed-data/AMA",
 )
 parser.add_argument("--debug", action="store_true", help="Debug Mode")
 parser.add_argument("--verbose", action="store_false", help="Verbose Mode")

@@ -49,21 +49,27 @@ def init_surf(points, normals, args: dict, method="ours"):
 
 
 def scale_and_save(args, meshes: Meshes):
-    points = meshes.verts_padded().cpu().squeeze()[..., :3]
-    points /= 0.95
-    points *= (args.points_max.cpu() - args.points_min.cpu()).max() / 2
-    # points *= (args.points_max.cpu() - args.points_min.cpu()) / 2
-    points += (args.points_max.cpu() + args.points_min.cpu()) / 2
-    for idx, (p, f) in enumerate(zip(points, meshes.faces_padded())):
-        save_obj(
-            Path(
-                os.path.join(
-                    args.io_args["out_path"],
-                    "%04d.obj" % idx,
-                )
-            ),
-            p,
-            f,
+    for l, mesh in enumerate(meshes):
+        points = mesh.verts_padded().cpu().squeeze()[..., :3]
+        points /= 0.95
+        points *= (args.points_max.cpu() - args.points_min.cpu()).max() / 2
+        # points *= (args.points_max.cpu() - args.points_min.cpu()) / 2
+        points += (args.points_max.cpu() + args.points_min.cpu()) / 2
+        os.makedirs(
+            os.path.join(args.io_args["out_path"], "Grid_upto_level_%d" % l),
+            exist_ok=True,
         )
+        for idx, (p, f) in enumerate(zip(points, mesh.faces_padded())):
+            save_obj(
+                Path(
+                    os.path.join(
+                        args.io_args["out_path"],
+                        "Grid_upto_level_%d" % l,
+                        "%04d.obj" % idx,
+                    )
+                ),
+                p,
+                f,
+            )
 
-    return Meshes(verts=points, faces=meshes.faces_padded())
+    return Meshes(verts=points, faces=mesh.faces_padded())
