@@ -75,7 +75,7 @@ To download the preprocessed data, see the data section of [Dynosurf](https://gi
 ```
 
 ## RUNS
-All run configs are predefined in configs/method/runs. For the ablation study see the configs/method/ablations path. Alter the path arguments accordingly [-o / -dp]. To create the extended AMA dataset, without sequences in the range of 40-120 frames, see src/io/dataset/process_ama_dataset.py.
+All run configs are predefined in configs/method/runs. For the ablation study see the configs/method/ablations path. Alter the path arguments accordingly [-o / -dp]. To create the extended AMA dataset, with sequences in the range of 40-120 frames, see src/io/dataset/process_ama_dataset.py.
 
 For the chained execution we supply a run.py script, see src/run.py. See the --help arguments for all the run/supplemental run options. We support multi-gpu runs, setting multiple gpu ids via --devices.
 
