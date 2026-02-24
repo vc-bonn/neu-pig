@@ -1,4 +1,4 @@
-<h1 align="center" id="heading">Preconditioned Deformation Grids</h1>
+<h1 align="center" id="heading">Neu-PiG: Neural Preconditioned Grids for Fast Dynamic Surface Reconstruction on Long Sequences</h1>
 
 <p align="center">
     <p align="center">
