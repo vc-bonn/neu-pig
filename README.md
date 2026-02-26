@@ -17,7 +17,7 @@
     </p>
     <h3 align="center">CVPR 2026</h3>
     <h3 align="center">
-        <a "https://arxiv.org/abs/2509.18097">Paper (arxiv)</a>
+        <a href="https://arxiv.org/abs/2602.22212">Paper</a>
 		</h3>
     <div align="center"></div>
 </p>
