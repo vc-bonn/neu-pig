@@ -10,7 +10,7 @@ from pathlib import Path
 from pcgrid.value_wrapper import ValueWrapper
 from pytorch3d.structures import Meshes
 from src.network.geometry_utils import compute_keyframe, init_surf, scale_and_save
-from src.utilities.eval_utils import eval_meshes, get_loc_scale
+# from src.utilities.eval_utils import eval_meshes, get_loc_scale
 import json
 import datetime
 from rich.progress import (
@@ -436,11 +436,12 @@ def output(in_q: Queue, out_q: Queue, q_progress: Queue):
             faces=data["gt_faces"],
             verts_normals=data["gt_normals"],
         )
-        loc_scales = [get_loc_scale(m) for m in gt_meshes]
+        # loc_scales = [get_loc_scale(m) for m in gt_meshes]
         meshes = scale_and_save(args, meshes)
 
         try:
-            out_q.put([args, data, meshes, loc_scales])
+            # out_q.put([args, data, meshes, loc_scales])
+            out_q.put([args, data, meshes, None])
             q_progress.put("output")
         except:
             continue
@@ -463,33 +464,34 @@ def eval(in_q: Queue, q_progress: Queue) -> None:
         except:
             continue
         if args == "done":
-            for k in metrics.keys():
-                metrics[k] = sum(metrics[k]) / len(metrics[k])
-            with open(
-                os.path.join(
-                    base_path,
-                    "Metrics.json",
-                ),
-                "w",
-            ) as json_file:
-                json.dump(
-                    metrics,
-                    json_file,
-                )
             break
-        goal_meshes = Meshes(
-            verts=data["gt_points"].squeeze()[..., :3],
-            faces=data["gt_faces"],
-            verts_normals=data["gt_normals"].squeeze()[..., :3],
-        )
-        eval_dict = eval_meshes(meshes, goal_meshes, loc_scales)
+            # for k in metrics.keys():
+            #     metrics[k] = sum(metrics[k]) / len(metrics[k])
+            # with open(
+            #     os.path.join(
+            #         base_path,
+            #         "Metrics.json",
+            #     ),
+            #     "w",
+            # ) as json_file:
+            #     json.dump(
+            #         metrics,
+            #         json_file,
+            #     )
+            # break
+        # goal_meshes = Meshes(
+        #     verts=data["gt_points"].squeeze()[..., :3],
+        #     faces=data["gt_faces"],
+        #     verts_normals=data["gt_normals"].squeeze()[..., :3],
+        # )
+        # eval_dict = eval_meshes(meshes, goal_meshes, loc_scales)
 
-        if metrics is None:
-            metrics = {k: [v] for k, v in eval_dict.items()}
-        else:
-            for k, v in eval_dict.items():
-                metrics[k].append(v)
-        log_metrics(eval_dict, args)
+        # if metrics is None:
+        #     metrics = {k: [v] for k, v in eval_dict.items()}
+        # else:
+        #     for k, v in eval_dict.items():
+        #         metrics[k].append(v)
+        # log_metrics(eval_dict, args)
         try:
             q_progress.put("eval")
         except:

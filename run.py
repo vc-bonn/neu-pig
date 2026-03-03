@@ -6,13 +6,13 @@ from pathlib import Path
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
-    "--AMA_PATH", type=str, default="/data/kaltheuner/preprocessed-data/AMA"
+    "--AMA_PATH", type=str, default="/mnt/vci-gpu1-data/kaltheuner/preprocessed-data/AMA"
 )
 parser.add_argument(
-    "--DFAUST_PATH", type=str, default="/data/kaltheuner/preprocessed-data/DFAUST"
+    "--DFAUST_PATH", type=str, default="/mnt/vci-gpu1-data/kaltheuner/preprocessed-data/DFAUST"
 )
 parser.add_argument(
-    "--DT4D_PATH", type=str, default="/data/kaltheuner/preprocessed-data/DT4D"
+    "--DT4D_PATH", type=str, default="/mnt/vci-gpu1-data/kaltheuner/preprocessed-data/DT4D"
 )
 parser.add_argument("--OUT_BASE", type=str, default="/data/kaltheuner/CVPR_2026")
 parser.add_argument(

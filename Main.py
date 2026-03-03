@@ -15,7 +15,7 @@ parser.add_argument(
     help="Method config file",
 )
 parser.add_argument("-se", "--seed", type=int, default=0)
-parser.add_argument("-d", "--devices", type=str, nargs="+", default=[0, 1, 2, 3, 4])
+parser.add_argument("-d", "--devices", type=str, nargs="+", default=[0])
 parser.add_argument("-t", "--target", type=str, default="obj")
 parser.add_argument("-np", "--number_points", type=int, default=5000)
 parser.add_argument("-o", "--out_path", type=str, default="test")
@@ -27,7 +27,7 @@ parser.add_argument(
     "-dp",
     "--directory_path",
     type=str,
-    default="/data/kaltheuner/preprocessed-data/AMA",
+    default="/mnt/vci-gpu1-data/kaltheuner/preprocessed-data/AMA2",
 )
 parser.add_argument("--debug", action="store_true", help="Debug Mode")
 parser.add_argument("--verbose", action="store_false", help="Verbose Mode")
