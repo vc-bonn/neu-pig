@@ -1,82 +1,92 @@
 import argparse
-from rich.console import Console
-import torch
-import numpy as np
-import random
 import json
 import os
-
-parser = argparse.ArgumentParser(description="nvdiffrecmc")
-parser.add_argument(
-    "-m",
-    "--methodConfig",
-    type=str,
-    default="configs/method/fit_.json",
-    help="Method config file",
-)
-parser.add_argument("-se", "--seed", type=int, default=0)
-parser.add_argument("-d", "--devices", type=str, nargs="+", default=[0, 1, 2, 3, 4])
-parser.add_argument("-t", "--target", type=str, default="obj")
-parser.add_argument("-np", "--number_points", type=int, default=5000)
-parser.add_argument("-o", "--out_path", type=str, default="test")
-parser.add_argument("-i", "--init", type=str, default="ours")
-parser.add_argument("-k", "--keyframe", type=str, default="ours")
-parser.add_argument("-ngp", "--instant_ngp", action="store_true")
-parser.add_argument("-ns", "--noise", type=float, default=0)
-parser.add_argument(
-    "-dp",
-    "--directory_path",
-    type=str,
-    default="/data/kaltheuner/preprocessed-data/AMA",
-)
-parser.add_argument("--debug", action="store_true", help="Debug Mode")
-parser.add_argument("--verbose", action="store_false", help="Verbose Mode")
+import random
+from pathlib import Path
 
 
-args = parser.parse_args()
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Run Neu-PIG optimization")
+    parser.add_argument(
+        "-m",
+        "--methodConfig",
+        dest="method_config",
+        type=Path,
+        default=Path("configs/method/fit_.json"),
+        help="Method config file",
+    )
+    parser.add_argument("-se", "--seed", type=int, default=0)
+    parser.add_argument("-d", "--devices", nargs="+", default=["0"])
+    parser.add_argument("-t", "--target", choices=("obj", "ply"), default="obj")
+    parser.add_argument("-np", "--number_points", type=int, default=5000)
+    parser.add_argument("-o", "--out_path", type=Path, default=Path("test"))
+    parser.add_argument("-i", "--init", default="ours")
+    parser.add_argument("-k", "--keyframe", default="ours")
+    parser.add_argument("-ngp", "--instant_ngp", action="store_true")
+    parser.add_argument("-ns", "--noise", type=float, default=0.0)
+    parser.add_argument(
+        "-dp",
+        "--directory_path",
+        type=Path,
+        default=Path("/data/kaltheuner/preprocessed-data/AMA"),
+    )
+    parser.add_argument("--debug", action="store_true", help="Run synchronously")
+    parser.add_argument("--quiet", dest="verbose", action="store_false")
+    parser.add_argument("--verbose", dest="verbose", action="store_true")
+    parser.set_defaults(verbose=True)
+    return parser
 
 
-os.environ["PYTHONWARNINGS"] = "ignore"
+def _device_name(device: str) -> str:
+    device = str(device)
+    return device if device == "cpu" or device.startswith("cuda:") else f"cuda:{device}"
 
-torch.manual_seed(0)
-np.random.seed(0)
-random.seed(0)
+
+def _seed_everything(seed: int) -> None:
+    import numpy as np
+    import torch
+
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
+
+def main() -> None:
+    args = build_parser().parse_args()
+
+    import torch
+
+    os.environ.setdefault("PYTHONWARNINGS", "ignore")
+    torch.multiprocessing.set_start_method("spawn", force=True)
+    _seed_everything(args.seed)
+
+    args.devices = [_device_name(device) for device in args.devices]
+    args.io_args = {
+        "base_out_path": str(args.out_path.resolve()),
+        "directory_path": str(args.directory_path.resolve()),
+        "noise": args.noise,
+    }
+
+    if not args.method_config.is_file():
+        raise FileNotFoundError(f"Method config not found: {args.method_config}")
+    with args.method_config.open(encoding="utf-8") as config_file:
+        args.method_args = json.load(config_file)
+
+    if args.noise > 0.0:
+        raise NotImplementedError("Noise ablation is currently disabled")
+
+    if args.verbose:
+        from rich.console import Console
+
+        console = Console(record=True)
+        console.log(f"Arguments:\n {args}\n")
+        console.log(f"IO Arguments:\n {args.io_args}\n")
+        console.log(f"Method Arguments:\n {args.method_args}\n")
+
+    from src.opt_run import OptRun
+
+    OptRun(args).run()
 
 
 if __name__ == "__main__":
-    args.devices = ["cuda:{}".format(device) for device in args.devices]
-    torch.multiprocessing.set_start_method("spawn")
-
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    console = Console(record=True)
-    args.instant_ngp = args.instant_ngp > 0
-
-    if args.verbose:
-        console.log("Arguments:\n {} \n".format(args))
-    args.io_args = {
-        "base_out_path": args.out_path,
-        "directory_path": args.directory_path,
-        "noise": 0.0,
-    }
-
-    if os.path.isfile(args.methodConfig):
-        with open(args.methodConfig) as json_file:
-            args.method_args = json.load(json_file)
-    else:
-        raise Exception("Method Config File is not a File [Path not Found]")
-
-    if args.io_args["noise"] > 0.0:
-        raise Exception("Noise Ablation Study is currently not re-enabled.")
-
-    args.io_args["base_out_path"] = os.path.abspath(args.io_args["base_out_path"])
-    args.io_args["directory_path"] = os.path.abspath(args.io_args["directory_path"])
-
-    if args.verbose:
-        console.log("IO Arguments:\n {} \n".format(args.io_args))
-        console.log("Method Arguments:\n {} \n".format(args.method_args))
-    from src.opt_run import Opt_Run
-
-    o = Opt_Run(args)
-    o.run()
+    main()

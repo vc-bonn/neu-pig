@@ -1,29 +1,18 @@
-from torch.utils.data.dataset import Dataset
 import torch
+from torch.utils.data import Dataset
 
 
 class OptimizationDataset(Dataset):
-    def __init__(self, args: dict, data: dict) -> None:  # T x P x 3
+    def __init__(self, args, data: dict[str, torch.Tensor]) -> None:
         super().__init__()
-        self.args = args
-        self.points = data["points"].to(self.device)
-        self.epochs = 0
-
-    @property
-    def device(self):
-        return self.args.device
-
-    @property
-    def io_args(self):
-        return self.args.io_args
+        self.points = data["points"].to(args.device, dtype=torch.float32)
+        self.indices = torch.arange(len(self.points), device=args.device)
 
     def __len__(self) -> int:
         return self.points.shape[0]
 
-    def __getitem__(self, index) -> dict:
-        self.epochs += 1
-
+    def __getitem__(self, index: int) -> dict[str, torch.Tensor]:
         return {
             "target": self.points[index],
-            "target_index": torch.tensor([index], device=self.device),
+            "target_index": self.indices[index],
         }

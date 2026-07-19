@@ -111,7 +111,6 @@ class Optimization(torch.nn.Module):
         v: torch.Tensor,
         f: torch.Tensor,
         data: dict,
-        limit=None,
     ):
 
         time = data["target_index"].squeeze() / data["target_index"].max()
@@ -138,7 +137,7 @@ class Optimization(torch.nn.Module):
             }
 
             point_grid, normal_grid = grids
-            point_values = point_grid(point_input, limit=limit)
+            point_values = point_grid(point_input)
             normal_values = normal_grid(normal_input)
             network_input = torch.cat(
                 (point_values["Network"], normal_values["Network"]), dim=-1
@@ -190,10 +189,10 @@ class Optimization(torch.nn.Module):
         dataloader = DataLoader(dataset=dataset, batch_size=1000, shuffle=False)
 
         for epoch in range(self.epochs):
-            for data in dataloader:
+            for batch in dataloader:
 
                 transformed_points, cd_p = self.forward_prediction(
-                    grids, vertices, faces, data
+                    grids, vertices, faces, batch
                 )
                 cd_smoothed = self.loss_time_smoothing(cd_p, epoch)
                 cd_p = cd_p.mean()
@@ -220,15 +219,14 @@ class Optimization(torch.nn.Module):
                 q_progress.put(
                     f"{self.args.device};{cd_smoothed.detach().cpu().item()};{regularization.detach().cpu().item()};{self.args.io_args['directory']};{epoch+1}"
                 )
-        meshes_per_grid_level = [
-            Meshes(
-                verts=self.forward_prediction(
-                    grids, vertices, faces, data, limit=l + 1
-                )[0]
-                .detach()
-                .cpu(),
-                faces=faces.cpu().repeat(transformed_points.shape[0], 1, 1),
-            )
-            for l in range(self.args.method_args["grid"]["n_level"])
-        ]
-        return meshes_per_grid_level
+        final_vertices = []
+        with torch.no_grad():
+            for batch in dataloader:
+                predicted_vertices, _ = self.forward_prediction(
+                    grids, vertices, faces, batch
+                )
+                final_vertices.append(predicted_vertices.cpu())
+
+        final_vertices = torch.cat(final_vertices)
+        final_faces = faces.detach().cpu().repeat(len(final_vertices), 1, 1)
+        return Meshes(verts=final_vertices, faces=final_faces)

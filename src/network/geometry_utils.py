@@ -1,5 +1,4 @@
 import torch
-import os
 from pathlib import Path
 from pytorch3d.io import save_obj
 from pytorch3d.structures import Meshes
@@ -48,28 +47,16 @@ def init_surf(points, normals, args: dict, method="ours"):
         raise Exception("Unknown Init Method [{}]".format(method))
 
 
-def scale_and_save(args, meshes: Meshes):
-    for l, mesh in enumerate(meshes):
-        points = mesh.verts_padded().cpu().squeeze()[..., :3]
-        points /= 0.95
-        points *= (args.points_max.cpu() - args.points_min.cpu()).max() / 2
-        # points *= (args.points_max.cpu() - args.points_min.cpu()) / 2
-        points += (args.points_max.cpu() + args.points_min.cpu()) / 2
-        os.makedirs(
-            os.path.join(args.io_args["out_path"], "Grid_upto_level_%d" % l),
-            exist_ok=True,
-        )
-        for idx, (p, f) in enumerate(zip(points, mesh.faces_padded())):
-            save_obj(
-                Path(
-                    os.path.join(
-                        args.io_args["out_path"],
-                        "Grid_upto_level_%d" % l,
-                        "%04d.obj" % idx,
-                    )
-                ),
-                p,
-                f,
-            )
+def scale_and_save(args, mesh: Meshes) -> Meshes:
+    points = mesh.verts_padded().cpu()[..., :3].clone()
+    points /= 0.95
+    points *= (args.points_max.cpu() - args.points_min.cpu()).max() / 2
+    points += (args.points_max.cpu() + args.points_min.cpu()) / 2
 
-    return Meshes(verts=points, faces=mesh.faces_padded())
+    faces = mesh.faces_padded().cpu()
+    output_directory = Path(args.io_args["out_path"]) / "meshes"
+    output_directory.mkdir(parents=True, exist_ok=True)
+    for index, (vertices, mesh_faces) in enumerate(zip(points, faces)):
+        save_obj(output_directory / f"{index:04d}.obj", vertices, mesh_faces)
+
+    return Meshes(verts=points, faces=faces)
