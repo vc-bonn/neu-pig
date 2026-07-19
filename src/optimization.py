@@ -109,8 +109,8 @@ class Optimization(torch.nn.Module):
         self,
         grids: list[ValueWrapper],
         v: torch.Tensor,
-        f: torch.Tensor,
         data: dict,
+        vertex_normals: torch.Tensor,
     ):
 
         time = data["target_index"].squeeze() / data["target_index"].max()
@@ -125,14 +125,8 @@ class Optimization(torch.nn.Module):
                 "grid_index": torch.zeros(1, device=v.device, dtype=torch.long),
             }
 
-            mesh = Meshes(verts=v[None, ...], faces=f[None, ...])
-            n = mesh.verts_normals_packed()
             normal_input = {
-                "points": n[None, None, None],
-                "grid_index": torch.zeros(1, device=v.device, dtype=torch.long),
-            }
-            point_input = {
-                "points": v[None, None, None],
+                "points": vertex_normals[None, None, None],
                 "grid_index": torch.zeros(1, device=v.device, dtype=torch.long),
             }
 
@@ -143,7 +137,13 @@ class Optimization(torch.nn.Module):
                 (point_values["Network"], normal_values["Network"]), dim=-1
             ).expand(data["target_index"].shape[0], -1, -1)
 
-        transformation_parameters = self.mlp(network_input, time)
+        with torch.autocast(
+            device_type=v.device.type,
+            dtype=torch.bfloat16,
+            enabled=v.device.type == "cuda",
+        ):
+            transformation_parameters = self.mlp(network_input, time)
+        transformation_parameters = transformation_parameters.float()
         translation = torch.tanh(
             transformation_parameters[..., self.rotation.rotation_dim :] * 0.1
         )
@@ -187,17 +187,21 @@ class Optimization(torch.nn.Module):
     ):
         dataset = optimization_dataset.OptimizationDataset(self.args, data)
         dataloader = DataLoader(dataset=dataset, batch_size=1000, shuffle=False)
+        with torch.no_grad():
+            vertex_normals = Meshes(
+                verts=vertices[None, ...], faces=faces[None, ...]
+            ).verts_normals_packed()
+            base_length = edgelength(vertices, faces)
 
         for epoch in range(self.epochs):
             for batch in dataloader:
 
                 transformed_points, cd_p = self.forward_prediction(
-                    grids, vertices, faces, batch
+                    grids, vertices, batch, vertex_normals
                 )
                 cd_smoothed = self.loss_time_smoothing(cd_p, epoch)
                 cd_p = cd_p.mean()
 
-                base_length = edgelength(vertices, faces)
                 regularization = self.regularization_loss(
                     transformed_points, faces, base_length
                 )
@@ -223,7 +227,7 @@ class Optimization(torch.nn.Module):
         with torch.no_grad():
             for batch in dataloader:
                 predicted_vertices, _ = self.forward_prediction(
-                    grids, vertices, faces, batch
+                    grids, vertices, batch, vertex_normals
                 )
                 final_vertices.append(predicted_vertices.cpu())
 
