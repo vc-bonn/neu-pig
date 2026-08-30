@@ -1,12 +1,12 @@
-<h1 align="center" id="heading">Preconditioned Deformation Grids</h1>
+<h1 align="center" id="heading">Neu-PiG: Neural Preconditioned Grids for Fast Dynamic Surface Reconstruction on Long Sequences</h1>
 
 <p align="center">
     <p align="center">
 		<b><a href="https://cg.cs.uni-bonn.de/person/m-sc-julian-kaltheuner">Julian Kaltheuner</a></b>
         &nbsp;·&nbsp;
-		<b><a href="https://cg.cs.uni-bonn.de/person/dr-markus-plack">Markus Plack</a></b>
-        &nbsp;·&nbsp;
 		<b><a href="https://cg.cs.uni-bonn.de/person/dr-hannah-droege">Hannah Droege</a></b>
+        &nbsp;·&nbsp;
+		<b><a href="https://cg.cs.uni-bonn.de/person/dr-markus-plack">Markus Plack</a></b>
         &nbsp;·&nbsp;
 		<b><a href="https://cg.cs.uni-bonn.de/person/dr-patrick-stotko">Patrick Stotko</a></b>
         &nbsp;·&nbsp;
@@ -17,7 +17,7 @@
     </p>
     <h3 align="center">CVPR 2026</h3>
     <h3 align="center">
-        <a "https://arxiv.org/abs/2509.18097">Paper (arxiv)</a>
+        <a href="https://arxiv.org/abs/2602.22212">Paper</a>
 		</h3>
     <div align="center"></div>
 </p>
@@ -75,7 +75,7 @@ To download the preprocessed data, see the data section of [Dynosurf](https://gi
 ```
 
 ## RUNS
-All run configs are predefined in configs/method/runs. For the ablation study see the configs/method/ablations path. Alter the path arguments accordingly [-o / -dp]. To create the extended AMA dataset, without sequences in the range of 40-120 frames, see src/io/dataset/process_ama_dataset.py.
+All run configs are predefined in configs/method/runs. For the ablation study see the configs/method/ablations path. Alter the path arguments accordingly [-o / -dp]. To create the extended AMA dataset, with sequences in the range of 40-120 frames, see src/io/dataset/process_ama_dataset.py.
 
 For the chained execution we supply a run.py script, see src/run.py. See the --help arguments for all the run/supplemental run options. We support multi-gpu runs, setting multiple gpu ids via --devices.
 
