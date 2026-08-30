@@ -39,7 +39,7 @@ conda install -y -c conda-forge openblas cmake ninja
 pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu126
 pip install ext/pcgrid
 pip install tqdm tensorboard scikit-learn charonload cmake gpytoolbox imageio matplotlib ninja open3d opencv-python pykdtree trimesh pymeshlab openmesh tensorboardx gitpython rich
-pip install --no-build-isolation "git+https://github.com/facebookresearch/pytorch3d.git"
+pip install --no-build-isolation "git+https://github.com/facebookresearch/pytorch3d.git@cbcae096a0b9b04f7c515d11bb4285a82e96b8d7"
 ```
 
 ## Main.py Arguments

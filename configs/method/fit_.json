@@ -4,8 +4,8 @@
     "rotation_method": "quaternions",
     "optimization": {
         "epochs": 1000,
-        "edgeloss":100,
-        "time_smoothing":"pdg" ,
+        "edgeloss": 100,
+        "time_smoothing": "pdg",
         "catchup_scaling": "pdg"
     },
     "grid": {
@@ -25,4 +25,5 @@
         "point_dim": 30,
         "time_dim": 8,
         "normal_dim": 2
-    }}
+    }
+}

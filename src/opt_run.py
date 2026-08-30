@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import copy
 import datetime as dt
 import json
@@ -9,7 +11,6 @@ from typing import Callable
 
 import torch
 import torch.multiprocessing as mp
-from pcgrid.value_wrapper import ValueWrapper
 from pytorch3d.structures import Meshes
 from rich.progress import (
     BarColumn,
@@ -21,10 +22,8 @@ from rich.progress import (
 
 from src.io.datasets.existing import ExistingDataset
 from src.network.geometry_utils import compute_keyframe, init_surf, scale_and_save
-from src.optimization import Optimization
 from src.utilities.eval_utils import eval_meshes, get_loc_scale
 from src.utilities.util import initialize_meshes, scale_points
-
 
 _DONE = None
 
@@ -51,10 +50,9 @@ class OptRun:
             raise NotADirectoryError(f"Dataset directory not found: {input_root}")
 
         directories = sorted(path for path in input_root.iterdir() if path.is_dir())
-        run_directory = (
-            Path(self.args.io_args["base_out_path"])
-            / dt.datetime.now().strftime("Date%Y-%m-%d_Time%H-%M-%S")
-        )
+        run_directory = Path(
+            self.args.io_args["base_out_path"]
+        ) / dt.datetime.now().strftime("Date%Y-%m-%d_Time%H-%M-%S")
         run_directory.mkdir(parents=True, exist_ok=True)
         self.args.io_args["base_out_path"] = str(run_directory)
         self.args.io_args["out_path"] = str(run_directory)
@@ -176,7 +174,9 @@ class OptRun:
             for process_queue in queues:
                 process_queue.close()
 
-    def _show_progress(self, q_progress, processes, job_count: int, worker_count: int) -> None:
+    def _show_progress(
+        self, q_progress, processes, job_count: int, worker_count: int
+    ) -> None:
         with Progress(
             TextColumn("[bold cyan]{task.description}"),
             BarColumn(),
@@ -221,7 +221,13 @@ class OptRun:
                     _, worker, details = message
                     raise RuntimeError(f"{worker} failed:\n{details}")
 
-                if message in {"data_start", "init_start", "opt_start", "output_start", "eval_start"}:
+                if message in {
+                    "data_start",
+                    "init_start",
+                    "opt_start",
+                    "output_start",
+                    "eval_start",
+                }:
                     progress.start_task(tasks[message.removesuffix("_start")])
                 elif message == "prepare_data":
                     progress.advance(tasks["data"])
@@ -311,9 +317,7 @@ def initialize_surface(
         args, data = item
         args.T = data["points"].shape[0]
         target_points, args.points_min, args.points_max = scale_points(data["points"])
-        keyframe_index = compute_keyframe(
-            target_points.squeeze(), method=args.keyframe
-        )
+        keyframe_index = compute_keyframe(target_points.squeeze(), method=args.keyframe)
         args.method_args["keyframe_index"] = keyframe_index
 
         verts, faces = init_surf(
@@ -328,6 +332,11 @@ def initialize_surface(
 
 
 def _make_grid(args, grid_values: int, *, normals: bool = False) -> ValueWrapper:
+    # Import pcgrid only in optimization workers. Importing it also loads
+    # cholespy, whose native module crashes during shutdown in processes which
+    # never use the solver (notably evaluation and the parent process).
+    from pcgrid.value_wrapper import ValueWrapper
+
     grid_args = {
         **args.method_args["grid"],
         "T": 1,
@@ -367,6 +376,8 @@ def optimize(
     input_consumed=None,
     output_consumed=None,
 ) -> None:
+    from src.optimization import Optimization
+
     _configure_worker()
     q_progress.put("opt_start")
 
@@ -378,6 +389,12 @@ def optimize(
             out_q.put(_DONE)
             if output_consumed is not None:
                 output_consumed.wait()
+                # cholespy 2.1.0 segfaults in its native module destructor on
+                # Python 3.12. At this point the downstream worker has consumed
+                # every result, so exit successfully without interpreter cleanup.
+                import os
+
+                os._exit(0)
             return
 
         args, data, verts, faces = item
@@ -465,6 +482,8 @@ def evaluate_results(in_q, q_progress, input_consumed=None) -> None:
         result = {
             key: float(value)
             for key, value in eval_meshes(mesh, goal_meshes, loc_scales).items()
+            if key
+            in ["chamfer-L2", "normals consistency", "f-score-5", "correspondance"]
         }
         for key, value in result.items():
             metrics.setdefault(key, []).append(value)
