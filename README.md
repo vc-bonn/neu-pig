@@ -35,11 +35,12 @@ conda create -n neupig python=3.12
 conda activate neupig
 
 
-conda install -y -c conda-forge openblas cmake ninja
-pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu126
-pip install ext/pcgrid
-pip install tqdm tensorboard scikit-learn charonload cmake gpytoolbox imageio matplotlib ninja open3d opencv-python pykdtree trimesh pymeshlab openmesh tensorboardx gitpython rich
-pip install --no-build-isolation "git+https://github.com/facebookresearch/pytorch3d.git@cbcae096a0b9b04f7c515d11bb4285a82e96b8d7"
+conda install -y -c nvidia -c conda-forge cuda-toolkit=12.8 openblas "cmake<4" ninja
+pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128
+pip install "scikit-build-core>=0.4.3" "nanobind>=2,<3"
+pip install --no-build-isolation ext/pcgrid
+pip install tqdm tensorboard scikit-learn charonload gpytoolbox imageio matplotlib ninja open3d opencv-python pykdtree trimesh pymeshlab openmesh tensorboardx gitpython rich
+CUDA_HOME="$CONDA_PREFIX" TORCH_CUDA_ARCH_LIST=12.0 pip install --no-build-isolation "git+https://github.com/facebookresearch/pytorch3d.git@cbcae096a0b9b04f7c515d11bb4285a82e96b8d7"
 ```
 
 ## Main.py Arguments
