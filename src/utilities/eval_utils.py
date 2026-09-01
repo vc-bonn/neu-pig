@@ -2,12 +2,10 @@ import numpy as np
 import torch
 from pytorch3d.structures import Meshes
 import trimesh
-from pykdtree.kdtree import KDTree
 
 from ext.dynosurf.evaluation.utils import (
     distance_p2p,
     get_threshold_percentage,
-    get_nearest_neighbors_indices_batch,
 )
 
 
@@ -23,14 +21,6 @@ def get_loc_scale(mesh: Meshes):
     scale = (bbox[1] - bbox[0]).max()
 
     return np.array(loc), np.array(scale)
-
-
-def correspondance(preds_goal: np.ndarray, preds_pred: np.ndarray):
-    kdtree = KDTree(preds_goal)
-    _, ind = kdtree.query(preds_pred, k=1)
-    pc_nn_t = preds_goal[ind]
-    l2_loss = np.mean(np.linalg.norm(preds_pred - pc_nn_t, axis=-1))
-    return l2_loss.mean().item()
 
 
 # Disclaimer: This evaluation function was taken from DynoSurf:
@@ -64,7 +54,6 @@ def eval_pointcloud(
         2 * precision[i] * recall[i] / (precision[i] + recall[i])
         for i in range(len(precision))
     ]
-    cor = correspondance(pointcloud_tgt, pointcloud)
 
     out_dict = {
         "completeness": completeness.mean(),
@@ -80,7 +69,6 @@ def eval_pointcloud(
         "f-score": F[9],  # threshold = 1.0%
         "f-score-15": F[14],  # threshold = 1.5%
         "f-score-20": F[19],  # threshold = 2.0%
-        "correspondance": cor,
         "normals_per_point": normals_correctness,
         "chamfer-L2_per_point": chamferL2,
     }
@@ -91,19 +79,42 @@ def eval_pointcloud(
 def eval_metrics(
     pred_meshes: Meshes, goal_meshes: Meshes, loc_scales: list[torch.Tensor]
 ):
-    metrics = None
+    verts_goal_list = [
+        verts.detach().cpu().numpy() for verts in goal_meshes.verts_list()
+    ]
+    faces_goal_list = [
+        faces.detach().cpu().numpy() for faces in goal_meshes.faces_list()
+    ]
+    verts_pred_list = [
+        verts.detach().cpu().numpy() for verts in pred_meshes.verts_list()
+    ]
+    faces_pred_list = [
+        faces.detach().cpu().numpy() for faces in pred_meshes.faces_list()
+    ]
+
+    num_frames = len(verts_pred_list)
+    if len(verts_goal_list) != num_frames or len(loc_scales) != num_frames:
+        raise ValueError(
+            "Predicted meshes, target meshes, and location scales must have equal lengths"
+        )
+
+    metrics = {}
     for verts_goal, faces_goal, verts_pred, faces_pred, loc_scale in zip(
-        goal_meshes.verts_padded(),
-        goal_meshes.faces_padded(),
-        pred_meshes.verts_padded(),
-        pred_meshes.faces_padded(),
+        verts_goal_list,
+        faces_goal_list,
+        verts_pred_list,
+        faces_pred_list,
         loc_scales,
     ):
         loc, scale = loc_scale
-        verts_goal = (verts_goal.cpu().numpy() - loc[None, :]) * (1 / scale)
-        verts_pred = (verts_pred.cpu().numpy() - loc[None, :]) * (1 / scale)
-        pred_mesh = trimesh.Trimesh(vertices=verts_pred, faces=faces_pred)
-        goal_mesh = trimesh.Trimesh(vertices=verts_goal, faces=faces_goal)
+        verts_goal_normalized = (verts_goal - loc[None, :]) * (1 / scale)
+        verts_pred_normalized = (verts_pred - loc[None, :]) * (1 / scale)
+        pred_mesh = trimesh.Trimesh(
+            vertices=verts_pred_normalized, faces=faces_pred, process=False
+        )
+        goal_mesh = trimesh.Trimesh(
+            vertices=verts_goal_normalized, faces=faces_goal, process=False
+        )
         pred_sample, idx = pred_mesh.sample(100000, return_index=True)
         pred_normals = pred_mesh.face_normals[idx]
         goal_sample, idx = goal_mesh.sample(100000, return_index=True)
@@ -111,11 +122,9 @@ def eval_metrics(
         result_dict = eval_pointcloud(
             pred_sample, goal_sample, pred_normals, goal_normals
         )
-        if metrics is None:
-            metrics = {k: [v] for k, v in result_dict.items()}
-        else:
-            for k, v in result_dict.items():
-                metrics[k].append(v)
+        for key, value in result_dict.items():
+            metrics.setdefault(key, []).append(value)
+
     return metrics
 
 

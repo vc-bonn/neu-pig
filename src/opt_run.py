@@ -483,7 +483,7 @@ def evaluate_results(in_q, q_progress, input_consumed=None) -> None:
             key: float(value)
             for key, value in eval_meshes(mesh, goal_meshes, loc_scales).items()
             if key
-            in ["chamfer-L2", "normals consistency", "f-score-5", "correspondance"]
+            in ["chamfer-L2", "normals consistency", "f-score-5"]
         }
         for key, value in result.items():
             metrics.setdefault(key, []).append(value)
