@@ -10,6 +10,35 @@ class Loss_f(torch.nn.Module):
         super().__init__()
         self.args = args
         self.sampling_num = 10000
+        self.target_indices = {}
+        self.sort_queries = self.args.method_args.get("performance", {}).get(
+            "sort_knn_queries", True
+        )
+
+    def prepare_target(self, target):
+        if target.is_cuda and self.args.method_args.get("performance", {}).get(
+            "spatial_knn", True
+        ):
+            from src.network.spatial_knn import SpatialIndex
+
+            self.target_indices[target.data_ptr()] = SpatialIndex(
+                target, self.sort_queries
+            )
+
+    def fast_chamfer(self, prediction, target):
+        from src.network.spatial_knn import SpatialIndex
+
+        target_index = self.target_indices.get(target.data_ptr())
+        if target_index is None:
+            target_index = SpatialIndex(target, self.sort_queries)
+        # Only the prediction's index changes during optimization.
+        distances1 = target_index.distances(prediction).squeeze(-1)
+        distances2 = (
+            SpatialIndex(prediction, self.sort_queries).distances(target).squeeze(-1)
+        )
+        weight1 = self.welsch_weight(distances1, 0.3).detach()
+        weight2 = self.welsch_weight(distances2, 0.3).detach()
+        return (weight1 * distances1).sum(1) + (weight2 * distances2).sum(1)
 
     def calc_chamfer(
         self,

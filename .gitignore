@@ -3,9 +3,18 @@
 build
 src/pcgrid.egg-info
 test*
+!tests/
+!tests/*.py
 *.ply
 *.obj
 results
 paper
 src/utilities/eval*
 vis
+
+# Local Python tooling and compiled extensions
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.so
+*.egg-info/

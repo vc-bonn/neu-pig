@@ -22,7 +22,6 @@ from rich.progress import (
 
 from src.io.datasets.existing import ExistingDataset
 from src.network.geometry_utils import compute_keyframe, init_surf, scale_and_save
-from src.utilities.eval_utils import eval_meshes, get_loc_scale
 from src.utilities.util import initialize_meshes, scale_points
 
 _DONE = None
@@ -332,6 +331,16 @@ def initialize_surface(
 
 
 def _make_grid(args, grid_values: int, *, normals: bool = False) -> ValueWrapper:
+    performance = args.method_args.get("performance", {})
+    if (performance.get("separable_grid", True)
+            and args.method_args["grid"]["solver"] == "CG"):
+        from src.network.preconditioned_grid import PreconditionedGrid
+
+        return PreconditionedGrid(args, grid_values, normals=normals)
+
+    if performance.get("grid_precision", "fp32") != "fp32":
+        raise ValueError("Reduced grid precision requires the fast separable CG backend")
+
     # Import pcgrid only in optimization workers. Importing it also loads
     # cholespy, whose native module crashes during shutdown in processes which
     # never use the solver (notably evaluation and the parent process).
@@ -425,6 +434,8 @@ def write_output(
     input_consumed=None,
     output_consumed=None,
 ) -> None:
+    from src.utilities.eval_utils import get_loc_scale
+
     _configure_worker()
     q_progress.put("output_start")
     completed_workers = 0
@@ -455,6 +466,8 @@ def write_output(
 
 
 def evaluate_results(in_q, q_progress, input_consumed=None) -> None:
+    from src.utilities.eval_utils import eval_meshes
+
     _configure_worker()
     q_progress.put("eval_start")
     metrics: dict[str, list[float]] = {}

@@ -29,7 +29,13 @@ class CatchupScaling(torch.nn.Module):
         elif self.method == "linear":
             return chamfer_distance ** (1 - (epoch / self.epochs))
         elif self.method == "exponential":
-            return chamfer_distance ** math.exp(-5 * (epoch / self.epochs))
+            exponent = -5 * (epoch / self.epochs)
+            exponent = (
+                torch.exp(exponent)
+                if isinstance(exponent, torch.Tensor)
+                else math.exp(exponent)
+            )
+            return chamfer_distance ** exponent
         elif self.method == "lerp":
             return (1 - (epoch / self.epochs)) * chamfer_distance + (
                 epoch / self.epochs

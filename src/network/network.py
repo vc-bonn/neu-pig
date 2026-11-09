@@ -49,14 +49,16 @@ class Network(torch.nn.Module):
         elif time_encoding == "gaussian_fourier":
             self.time_encoding = GaussianFourier(args, time_dim)
 
-    def forward(self, x, t_scalar):
+    def forward(self, x, t_scalar, time_embedding=None):
         # points: (B, P, 3)
         # t_scalar: (B,) or float
         if not isinstance(t_scalar, torch.Tensor):
             t_scalar = torch.tensor([t_scalar] * x.shape[0], device=x.device)
         if t_scalar.dim() == 0:
             t_scalar = t_scalar.unsqueeze(0).repeat(x.shape[0])
-        time_emb = self.time_encoding(t_scalar)
+        time_emb = (
+            self.time_encoding(t_scalar) if time_embedding is None else time_embedding
+        )
         # broadcast to points
         B, P, _ = x.shape
         tf = time_emb[:, None, :].expand(B, P, -1)  # (B, P, hidden)
