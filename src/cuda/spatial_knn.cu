@@ -153,9 +153,9 @@ std::vector<torch::Tensor> spatial_build(torch::Tensor points,
     return {heads, next};
 }
 
-std::vector<torch::Tensor> spatial_query(torch::Tensor points, torch::Tensor reference,
+std::vector<torch::Tensor> spatial_query_ordered(torch::Tensor points, torch::Tensor reference,
                                         torch::Tensor lower, torch::Tensor width,
-                                        torch::Tensor heads, torch::Tensor next, bool sort_queries) {
+                                        torch::Tensor heads, torch::Tensor next, bool sort_queries, torch::Tensor cached_order) {
     check_points(points);
     check_points(reference);
     check_bounds(points, lower, width);
@@ -173,7 +173,12 @@ std::vector<torch::Tensor> spatial_query(torch::Tensor points, torch::Tensor ref
     auto indices = torch::empty({batches, count, 1}, points.options().dtype(torch::kInt64));
     torch::Tensor order;
     if (count) {
-        if (sort_queries) {
+        if (cached_order.defined()) {
+            check_tensor(cached_order, points, torch::kInt64, "query order");
+            TORCH_CHECK(cached_order.dim() == 2 && cached_order.size(0) == batches
+                        && cached_order.size(1) == count, "Expected BxN query permutation");
+            order = cached_order;
+        } else if (sort_queries) {
             auto cell_keys = torch::empty({batches, count}, points.options().dtype(torch::kInt64));
             keys<<<(batches * count + 255) / 256, 256, 0, at::cuda::getCurrentCUDAStream()>>>(
                 points.data_ptr<float>(), lower.data_ptr<float>(), width.data_ptr<float>(),
@@ -185,10 +190,17 @@ std::vector<torch::Tensor> spatial_query(torch::Tensor points, torch::Tensor ref
             points.data_ptr<float>(), reference.data_ptr<float>(), lower.data_ptr<float>(),
             width.data_ptr<float>(), heads.data_ptr<int>(), next.data_ptr<int>(),
             distances.data_ptr<float>(), indices.data_ptr<int64_t>(), count,
-            reference.size(1), batches * count, sort_queries ? order.data_ptr<int64_t>() : nullptr);
+            reference.size(1), batches * count, order.defined() ? order.data_ptr<int64_t>() : nullptr);
         C10_CUDA_KERNEL_LAUNCH_CHECK();
     }
     return {distances, indices};
+}
+
+std::vector<torch::Tensor> spatial_query(torch::Tensor points, torch::Tensor reference,
+                                        torch::Tensor lower, torch::Tensor width,
+                                        torch::Tensor heads, torch::Tensor next, bool sort_queries) {
+    return spatial_query_ordered(points, reference, lower, width, heads, next,
+                                 sort_queries, torch::Tensor());
 }
 
 std::vector<torch::Tensor> spatial_backward(torch::Tensor points, torch::Tensor reference,
@@ -222,5 +234,6 @@ std::vector<torch::Tensor> spatial_backward(torch::Tensor points, torch::Tensor 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("build", &spatial_build);
     m.def("query", &spatial_query);
+    m.def("query_ordered", &spatial_query_ordered);
     m.def("backward", &spatial_backward);
 }

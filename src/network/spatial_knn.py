@@ -22,11 +22,21 @@ def extension():
 class _Distances(torch.autograd.Function):
     @staticmethod
     def forward(
-        ctx, points, reference, lower, width, heads, next_indices, sort_queries
+        ctx,
+        points,
+        reference,
+        lower,
+        width,
+        heads,
+        next_indices,
+        sort_queries,
+        query_order,
     ):
-        distances, indices = extension().query(
-            points, reference, lower, width, heads, next_indices, sort_queries
-        )
+        arguments = (points, reference, lower, width, heads, next_indices, sort_queries)
+        if query_order is None:
+            distances, indices = extension().query(*arguments)
+        else:
+            distances, indices = extension().query_ordered(*arguments, query_order)
         ctx.save_for_backward(points, reference, indices)
         return distances
 
@@ -47,7 +57,7 @@ class _Distances(torch.autograd.Function):
             grad_points = None
         if not need_reference:
             grad_reference = None
-        return grad_points, grad_reference, None, None, None, None, None
+        return grad_points, grad_reference, None, None, None, None, None, None
 
 
 class SpatialIndex:
@@ -77,7 +87,18 @@ class SpatialIndex:
                 self.reference, self.lower, self.width
             )
 
-    def distances(self, points):
+    @torch.no_grad()
+    def query_order(self, points):
+        cells = (
+            ((points - self.lower[:, None]) / self.width[:, None, None])
+            .floor()
+            .clamp(0, 31)
+            .long()
+        )
+        keys = (cells[..., 0] * 32 + cells[..., 1]) * 32 + cells[..., 2]
+        return keys.argsort(dim=1).contiguous()
+
+    def distances(self, points, query_order=None):
         return _Distances.apply(
             points.contiguous(),
             self.reference,
@@ -86,4 +107,5 @@ class SpatialIndex:
             self.heads,
             self.next_indices,
             self.sort_queries,
+            query_order,
         )

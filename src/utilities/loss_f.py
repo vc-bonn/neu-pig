@@ -11,6 +11,7 @@ class Loss_f(torch.nn.Module):
         self.args = args
         self.sampling_num = 10000
         self.target_indices = {}
+        self.target_orders = {}
         self.sort_queries = self.args.method_args.get("performance", {}).get(
             "sort_knn_queries", True
         )
@@ -21,9 +22,12 @@ class Loss_f(torch.nn.Module):
         ):
             from src.network.spatial_knn import SpatialIndex
 
-            self.target_indices[target.data_ptr()] = SpatialIndex(
-                target, self.sort_queries
-            )
+            index = SpatialIndex(target, self.sort_queries)
+            self.target_indices[target.data_ptr()] = index
+            if self.sort_queries and self.args.method_args.get("performance", {}).get(
+                "reuse_knn_query_order", True
+            ):
+                self.target_orders[target.data_ptr()] = index.query_order(target)
 
     def fast_chamfer(self, prediction, target):
         from src.network.spatial_knn import SpatialIndex
@@ -34,7 +38,9 @@ class Loss_f(torch.nn.Module):
         # Only the prediction's index changes during optimization.
         distances1 = target_index.distances(prediction).squeeze(-1)
         distances2 = (
-            SpatialIndex(prediction, self.sort_queries).distances(target).squeeze(-1)
+            SpatialIndex(prediction, self.sort_queries)
+            .distances(target, self.target_orders.get(target.data_ptr()))
+            .squeeze(-1)
         )
         weight1 = self.welsch_weight(distances1, 0.3).detach()
         weight2 = self.welsch_weight(distances2, 0.3).detach()

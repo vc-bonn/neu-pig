@@ -49,6 +49,52 @@ class Network(torch.nn.Module):
         elif time_encoding == "gaussian_fourier":
             self.time_encoding = GaussianFourier(args, time_dim)
 
+    def enable_compile(self, performance):
+        self.compile_bucket = int(performance.get("compile_vertex_bucket", 128))
+        if self.compile_bucket < 1:
+            raise ValueError("compile_vertex_bucket must be positive")
+        # Keep one registered set of parameters/state-dict entries. The compiled
+        # wrapper refers to the same module and is reused by Dynamo's cache.
+        mode = performance.get("compile_mlp_mode", "max-autotune")
+        if mode not in ("default", "max-autotune"):
+            raise ValueError("compile_mlp_mode must be default or max-autotune")
+        # Keep intermediate BF16/FP16 casts explicit. Compiled GEMM choices
+        # can still change rounding near activation boundaries.
+        options = {"triton.cudagraphs": False, "emulate_precision_casts": True}
+        if mode == "max-autotune":
+            options.update(max_autotune=True, coordinate_descent_tuning=True)
+        object.__setattr__(
+            self,
+            "_compiled_network",
+            torch.compile(
+                self.network,
+                fullgraph=True,
+                dynamic=False,
+                options=options,
+            ),
+        )
+
+    def prepare_compile(self, frames, vertices, device, dtype):
+        if not hasattr(self, "_compiled_network"):
+            return
+        count = (
+            (vertices + self.compile_bucket - 1)
+            // self.compile_bucket
+            * self.compile_bucket
+        )
+        features = self.network.mlp[0].in_features
+        example = torch.zeros(
+            frames, count, features, device=device, requires_grad=True
+        )
+        # Compile forward and backward before timing/capture without an update.
+        with torch.autocast(
+            device_type=device.type,
+            dtype=dtype,
+            enabled=device.type == "cuda" and dtype != torch.float32,
+        ):
+            self._compiled_network(example).sum().backward()
+        self.zero_grad(set_to_none=True)
+
     def forward(self, x, t_scalar, time_embedding=None):
         # points: (B, P, 3)
         # t_scalar: (B,) or float
@@ -63,4 +109,9 @@ class Network(torch.nn.Module):
         B, P, _ = x.shape
         tf = time_emb[:, None, :].expand(B, P, -1)  # (B, P, hidden)
         x = torch.cat([x, tf], dim=-1)  # (B, P, 3+hidden)
+        if hasattr(self, "_compiled_network"):
+            padding = (-P) % self.compile_bucket
+            if padding:
+                x = torch.nn.functional.pad(x, (0, 0, 0, padding))
+            return self._compiled_network(x)[:, :P]
         return self.network(x)

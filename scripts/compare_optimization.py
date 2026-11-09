@@ -262,6 +262,14 @@ def main():
             epoch_ms=runtime.epoch_ms,
             peak_allocated_mib=runtime.peak_memory_mib,
         )
+        row["mlp_preparation_seconds"] = getattr(
+            optimizer, "mlp_preparation_seconds", 0.0
+        )
+        row["network_adam_backend"] = (
+            "fused"
+            if optimizer.optimizer.defaults.get("fused")
+            else "foreach" if optimizer.optimizer.defaults.get("foreach") else "single"
+        )
         row["network_optimizer_steps"] = sorted(
             {
                 int(state["step"].item())
@@ -272,6 +280,21 @@ def main():
         if row["network_optimizer_steps"] != [optimizer.epochs]:
             raise RuntimeError(
                 f"Unexpected optimizer update count: {row['network_optimizer_steps']}"
+            )
+        row["grid_optimizer_steps"] = [
+            sorted(
+                {
+                    int(state["step"].item())
+                    for state in grid.optimizer.state.values()
+                    if "step" in state
+                }
+            )
+            for grid in grids
+            if hasattr(grid, "optimizer")
+        ]
+        if any(steps != [optimizer.epochs] for steps in row["grid_optimizer_steps"]):
+            raise RuntimeError(
+                f"Unexpected grid optimizer update count: {row['grid_optimizer_steps']}"
             )
         if not opts.reference:
             optimizers = [optimizer.optimizer] + [

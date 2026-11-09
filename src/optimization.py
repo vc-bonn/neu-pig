@@ -15,10 +15,14 @@ from src.io.datasets import optimization_dataset
 from src.network.network import Network
 import os
 import math
+import time
 from torch.multiprocessing import Queue
 from src.rotation import Rotation
 from src.loss_time_smoothing import LossTimeSmoothing
 from src.network.precision import compute_dtype
+from src.network.adam import make_adam
+
+_compile_notice_printed = False
 
 
 class Optimization(torch.nn.Module):
@@ -89,17 +93,9 @@ class Optimization(torch.nn.Module):
 
             self.encoding = tcnn.Encoding(3, encoding).to(self.args.device)
             param_groups.append({"params": self.encoding.parameters(), "lr": 0.005})
-        self.optimizer = torch.optim.Adam(
-            param_groups,
-            fused=(
-                torch.device(self.args.device).type == "cuda"
-                and self.performance.get("fused_adam", True)
-            ),
-            capturable=(
-                torch.device(self.args.device).type == "cuda"
-                and self.performance.get("cuda_graph", True)
-            ),
-        )
+        self.optimizer = make_adam(param_groups, self.args.device, self.performance)
+        if self.performance.get("compile_mlp", True):
+            self.mlp.enable_compile(self.performance)
 
     @property
     def method_args(self):
@@ -167,18 +163,26 @@ class Optimization(torch.nn.Module):
                 network_input, time, time_embedding=data.get("time_embedding")
             )
         transformation_parameters = transformation_parameters.float()
-        translation = torch.tanh(
-            transformation_parameters[..., self.rotation.rotation_dim :] * 0.1
-        )
-        rotation_parameters = transformation_parameters[
-            ..., : self.rotation.rotation_dim
-        ]
-        transform = self.rotation(rotation_parameters)
+        if (
+            v.is_cuda
+            and self.rotation.method == "quaternions"
+            and self.performance.get("fused_geometry", True)
+        ):
+            from src.network.optimization_ops import transform_vertices
 
-        transformed_points = (transform @ v[None, ..., None]).squeeze(
-            dim=-1
-        ) + translation
+            transformed_points = transform_vertices(transformation_parameters, v)
+        else:
+            translation = torch.tanh(
+                transformation_parameters[..., self.rotation.rotation_dim :] * 0.1
+            )
+            rotation_parameters = transformation_parameters[
+                ..., : self.rotation.rotation_dim
+            ]
+            transform = self.rotation(rotation_parameters)
 
+            transformed_points = (transform @ v[None, ..., None]).squeeze(
+                dim=-1
+            ) + translation
         cd_p = (
             self.chamfer_distance(transformed_points, data["target_xyz"])
             if compute_loss
@@ -189,6 +193,14 @@ class Optimization(torch.nn.Module):
     def regularization_loss(
         self, v: torch.Tensor, f: torch.Tensor, base_length: torch.Tensor
     ):
+        if (
+            v.is_cuda
+            and self.performance.get("fused_edge_loss", True)
+            and self.performance.get("cache_edges", True)
+        ):
+            from src.network.optimization_ops import edge_loss
+
+            return edge_loss(v, self._edges, base_length)
         if self.performance.get("cache_edges", True):
             endpoints = v[:, self._edges]
             edge_length = (endpoints[:, :, 0] - endpoints[:, :, 1]).norm(dim=-1)
@@ -218,6 +230,7 @@ class Optimization(torch.nn.Module):
         if len(dataset) == 0 or self.epochs < 1:
             raise ValueError("Optimization requires at least one frame and one epoch")
         self.loss_f.target_indices.clear()
+        self.loss_f.target_orders.clear()
         # The target sequence is immutable throughout optimization. Batch once.
         batches = []
         for start in range(0, len(dataset), 1000):
@@ -253,6 +266,18 @@ class Optimization(torch.nn.Module):
                 if hasattr(grid, "prepare"):
                     grid.prepare(grid_input["points"])
 
+        if vertices.is_cuda and (
+            self.performance.get("fused_geometry", True)
+            or self.performance.get("fused_edge_loss", True)
+            or any(
+                getattr(level, "stencil_nodes", None) is not None
+                for grid in grids
+                for level in getattr(grid, "levels", [])
+            )
+        ):
+            from src.network.optimization_ops import extension
+
+            extension()
         phase = runtime.phase if runtime is not None else lambda name: nullcontext()
         training_parameters = [
             p for group in self.optimizer.param_groups for p in group["params"]
@@ -307,7 +332,7 @@ class Optimization(torch.nn.Module):
             and vertices.is_cuda
             and len(batches) == 1
             and all(isinstance(grid, PreconditionedGrid) for grid in grids)
-            and self.performance.get("fused_adam", True)
+            and self.optimizer.defaults.get("capturable", False)
             and self.performance.get("spatial_knn", True)
             and not self.args.instant_ngp
             and not (runtime is not None and runtime.diagnostic)
@@ -317,6 +342,34 @@ class Optimization(torch.nn.Module):
         if warmup_stream is not None:
             warmup_stream.wait_stream(torch.cuda.current_stream(vertices.device))
         epoch_tensor = torch.zeros((), device=vertices.device)
+        self.mlp_preparation_seconds = 0.0
+        if self.performance.get("compile_mlp", True):
+            global _compile_notice_printed
+            first_preparation = not _compile_notice_printed
+            if first_preparation:
+                print(
+                    "[Neu-PiG] Preparing compiled MLP (forward/backward); "
+                    "the first use of a configuration may take longer while kernels "
+                    "are compiled and tuned. Compatible cached kernels are reused.",
+                    flush=True,
+                )
+            if vertices.is_cuda:
+                torch.cuda.synchronize(vertices.device)
+            started = time.perf_counter()
+            for frames in sorted({len(batch["target_index"]) for batch in batches}):
+                self.mlp.prepare_compile(
+                    frames, len(vertices), vertices.device, self.mlp_dtype
+                )
+            if vertices.is_cuda:
+                torch.cuda.synchronize(vertices.device)
+            self.mlp_preparation_seconds = time.perf_counter() - started
+            if first_preparation or self.mlp_preparation_seconds >= 1.0:
+                print(
+                    f"[Neu-PiG] Compiled MLP ready in {self.mlp_preparation_seconds:.3f}s; "
+                    "starting optimization.",
+                    flush=True,
+                )
+            _compile_notice_printed = True
         if runtime is not None:
             runtime.start()
         for epoch in range(self.epochs):

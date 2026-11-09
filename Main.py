@@ -28,7 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
         "-dp",
         "--directory_path",
         type=Path,
-        default=Path("/data/kaltheuner/preprocessed-data/AMA"),
+        default=Path.home() / "AMA",
     )
     parser.add_argument("--debug", action="store_true", help="Run synchronously")
     parser.add_argument("--quiet", dest="verbose", action="store_false")

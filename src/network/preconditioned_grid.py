@@ -13,6 +13,7 @@ import math
 import torch
 from torch.nn import functional as F
 from src.network.precision import compute_dtype
+from src.network.adam import make_adam
 
 
 def axis_eigendecomposition(resolution: int):
@@ -52,7 +53,15 @@ class _SymmetricSolve(torch.autograd.Function):
 
 
 class GridLevel(torch.nn.Module):
-    def __init__(self, resolution, channels, smoothness, device, dtype=torch.float32):
+    def __init__(
+        self,
+        resolution,
+        channels,
+        smoothness,
+        device,
+        dtype=torch.float32,
+        fixed_sampling=True,
+    ):
         super().__init__()
         if channels < 1 or not math.isfinite(smoothness) or smoothness < 0:
             raise ValueError(
@@ -60,6 +69,7 @@ class GridLevel(torch.nn.Module):
             )
         self.resolution = resolution
         self.compute_dtype = dtype
+        self.fixed_sampling = fixed_sampling
         self.values = torch.nn.Parameter(
             torch.zeros(resolution, resolution, resolution, channels, device=device)
         )
@@ -76,20 +86,29 @@ class GridLevel(torch.nn.Module):
         self.register_buffer("compute_basis", self.basis.to(dtype))
         self.register_buffer("compute_inverse", self.inverse.to(dtype))
         self.register_buffer("sampling", None)
+        self.register_buffer("stencil_nodes", None)
+        self.register_buffer("stencil_weights", None)
         self.prepared_points = None
         self.point_version = None
 
     @torch.no_grad()
     def prepare(self, points, max_nodes):
         self.sampling = None
+        self.stencil_nodes = self.stencil_weights = None
         self.prepared_points = None
         self.point_version = None
         nodes = self.resolution**3
-        if (
-            nodes > max_nodes
-            or points.requires_grad
-            or tuple(points.shape[:3]) != (1, 1, 1)
-        ):
+        if points.requires_grad or tuple(points.shape[:3]) != (1, 1, 1):
+            return
+        self.prepared_points = points
+        self.point_version = points._version
+        if nodes > max_nodes:
+            if self.fixed_sampling and points.is_cuda:
+                from src.network.optimization_ops import interpolation_stencil
+
+                self.stencil_nodes, self.stencil_weights = interpolation_stencil(
+                    points, self.resolution
+                )
             return
         # S maps a grid to the fixed template vertices. Precompute S M^-1;
         # subsequent forward/adjoint operations are just two dense GEMMs.
@@ -119,15 +138,22 @@ class GridLevel(torch.nn.Module):
 
     def forward(self, points):
         if (
-            self.sampling is not None
-            and points is self.prepared_points
+            points is self.prepared_points
             and not points.requires_grad
             and points._version == self.point_version
         ):
-            values = self.values.reshape(-1, self.values.shape[-1]).to(
-                self.compute_dtype
-            )
-            return (self.sampling @ values).float()[None]
+            if self.sampling is not None:
+                values = self.values.reshape(-1, self.values.shape[-1]).to(
+                    self.compute_dtype
+                )
+                return (self.sampling @ values).float()[None]
+            if self.stencil_nodes is not None:
+                from src.network.optimization_ops import sample_fixed
+
+                grid = self.solve().float().reshape(-1, self.values.shape[-1])
+                return sample_fixed(grid, self.stencil_nodes, self.stencil_weights)[
+                    None
+                ]
         # 3D interpolation, geometry and losses remain FP32 even when the
         # linear solver and dense sampling maps use half precision.
         values = self.solve().float().permute(3, 0, 1, 2)[None]
@@ -159,6 +185,9 @@ class PreconditionedGrid(torch.nn.Module):
                     config["smoothness"] * config["local_lambda_adapt"] ** index,
                     args.device,
                     dtype=dtype,
+                    fixed_sampling=args.method_args.get("performance", {}).get(
+                        "fixed_grid_sampling", True
+                    ),
                 )
                 for index in range(count)
             ]
@@ -167,12 +196,8 @@ class PreconditionedGrid(torch.nn.Module):
             {"params": [level.values], "lr": config["lr"] * config["lr_adapt"] ** index}
             for index, level in enumerate(self.levels)
         ]
-        cuda = torch.device(args.device).type == "cuda"
-        self.optimizer = torch.optim.Adam(
-            parameters,
-            fused=cuda,
-            capturable=cuda
-            and args.method_args.get("performance", {}).get("cuda_graph", True),
+        self.optimizer = make_adam(
+            parameters, args.device, args.method_args.get("performance", {})
         )
         performance = args.method_args.get("performance", {})
         self.max_dense_nodes = performance.get("dense_grid_max_nodes", 4096)
