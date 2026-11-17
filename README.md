@@ -116,18 +116,24 @@ point count, and epoch count are preserved. MLP compilation is enabled by defaul
 Measured on the first ten AMA sequences in lexicographic order (nine `crane`
 sequences and `march1_0010`, rather than ten distinct subjects), with 1,000 epochs,
 5,000 points per frame, seed 0, eight CPU threads, and an NVIDIA RTX 5090
-(PyTorch 2.9.0+cu130, CUDA toolkit 13.1). This paired comparison uses the previously
-optimized `main` revision `9394e83` as its baseline:
+(PyTorch 2.9.0+cu130, CUDA toolkit 13.1). The baseline is the original CVPR
+implementation preserved on `cvpr-state` (`97e9da0`):
 
-| Measure | Previous main (`9394e83`) | Without compilation | Current defaults (compiled MLP) |
-|---|---:|---:|---:|
-| Total optimization time ↓ | 66.893 s | 52.362 s | 44.013 s |
-| Mean time per sequence ↓ | 6.689 s | 5.236 s | 4.401 s |
-| Optimization time reduction | — | 21.7% | 34.2% |
-| Mean Chamfer-L2 ↓ | 5.23195 × 10⁻⁶ | 5.13538 × 10⁻⁶ | 5.09189 × 10⁻⁶ |
-| Mean normal consistency ↑ | 0.940279 | 0.940384 | 0.940487 |
-| Mean F-score (0.005) ↑ | 0.982628 | 0.983448 | 0.984190 |
-| Peak allocated tensor memory ↓ | 1,239 MiB | 1,253 MiB | 950 MiB |
+| Measure | Original (`cvpr-state`) | Current defaults (compiled MLP) |
+|---|---:|---:|
+| Total optimization time ↓ | 178.508 s | 44.013 s |
+| Mean time per sequence ↓ | 17.851 s | 4.401 s |
+| Optimization time reduction | — | 75.3% |
+| Optimization speedup | — | 4.06× |
+| Mean Chamfer-L2 ↓ | 5.24397 × 10⁻⁶ | 5.09189 × 10⁻⁶ |
+| Mean normal consistency ↑ | 0.940222 | 0.940487 |
+| Mean F-score (0.005) ↑ | 0.982574 | 0.984190 |
+| Peak allocated tensor memory ↓ | 998 MiB | 950 MiB |
+
+The CVPR baseline was measured in an earlier run; the current implementation was
+measured separately on the same machine using the same cached inputs and
+initialization. These are single-run timings rather than interleaved repeated
+measurements.
 
 Timing excludes loading, initialization, operator precomputation, MLP compilation,
 final prediction, and evaluation; it includes loss computation, backward, optimizer
@@ -139,14 +145,10 @@ roughly 31 s outside the optimization loop; first-use startup can exceed the loo
 savings. Full-call timings also depend on CUDA extension build caches.
 
 Average metrics improved slightly, but these single-seed results do not establish
-statistical significance. Chamfer-L2 regressed on four sequences without
-compilation (largest increase 4.83%) and five with compilation (largest increase 6.97%).
+statistical significance. Compared with `cvpr-state`, Chamfer-L2 improved on nine
+sequences and regressed on one (`crane_0129`, a 5.03% increase).
 Equivalent formulas and different GPU arithmetic can change training trajectories;
 compilation also changes BF16 rounding near activation boundaries.
-
-For historical context, the previous update reduced optimization time from
-178.508 s on `cvpr-state` to 66.940 s in a separate ten-sequence measurement (2.67×).
-The table above measures the additional improvements against a fresh baseline.
 
 ### Configuration
 
@@ -212,9 +214,10 @@ Run from the repository root with preprocessed AMA data:
 # Optimization only; --profile-epochs 0 skips the separate diagnostic trace.
 python scripts/benchmark_optimization.py --dataset ~/AMA --limit 10
 
-# Paired runtime and evaluation comparison, explicitly using 1,000 updates.
+# Runtime and evaluation comparison against the original CVPR implementation.
+git fetch origin
 python scripts/compare_optimization.py --dataset ~/AMA --root results/comparison \
-    --label baseline --reference --freeze-reference --reference-revision 9394e83 \
+    --label baseline --reference --freeze-reference --reference-revision origin/cvpr-state \
     --limit 10 --epochs 1000
 python scripts/compare_optimization.py --dataset ~/AMA --root results/comparison \
     --label compiled --limit 10 --epochs 1000
@@ -224,7 +227,6 @@ python scripts/compare_optimization.py --dataset ~/AMA --root results/comparison
 printf '%s\n' '{"compile_mlp": false}' > results/comparison/eager.json
 python scripts/compare_optimization.py --dataset ~/AMA --root results/comparison \
     --label eager --limit 10 --epochs 1000 --performance results/comparison/eager.json
-# Use origin/cvpr-state instead of 9394e83 for the original CVPR implementation.
 
 # Independent MLP/grid precision experiments and kernel tests.
 python scripts/precision_sweep.py --dataset ~/AMA --input-cache-root results/comparison
