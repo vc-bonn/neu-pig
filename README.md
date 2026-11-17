@@ -24,23 +24,18 @@
 
 ![](assets/teaser.png)
 
-**Code update:** `main` includes an optimized implementation with substantially
-faster optimization and slightly improved average reconstruction metrics in our
-AMA benchmark. The original CVPR implementation is preserved on the
-[`cvpr-state`](https://github.com/vc-bonn/neu-pig/tree/cvpr-state) branch.
+**Updated code:** `main` includes faster grid solves, caching, fused CUDA kernels,
+CUDA graphs, and MLP compilation. The original implementation is available on
+[`cvpr-state`](https://github.com/vc-bonn/neu-pig/tree/cvpr-state).
 
 ## Install
 
-The runtime measurements and kernel tests use Python 3.12, PyTorch 2.9.0+cu130,
-and CUDA toolkit 13.1 on an RTX 5090. The commands below use those versions.
-`TORCH_CUDA_ARCH_LIST=12.0` targets that GPU; adjust it for your GPU when building
-CUDA extensions.
+Benchmark environment: Linux, Python 3.12, PyTorch 2.9.0+cu130, CUDA toolkit 13.1,
+and RTX 5090. Adjust `TORCH_CUDA_ARCH_LIST=12.0` for your GPU.
 
 ```bash
-git clone https://github.com/vc-bonn/neu-pig.git neu-pig
+git clone --recursive https://github.com/vc-bonn/neu-pig.git
 cd neu-pig
-
-git submodule update --init
 
 conda create -n neupig python=3.12
 conda activate neupig
@@ -53,71 +48,52 @@ pip install tqdm tensorboard scikit-learn charonload gpytoolbox imageio matplotl
 CUDA_HOME="$CONDA_PREFIX" TORCH_CUDA_ARCH_LIST=12.0 pip install --no-build-isolation "git+https://github.com/facebookresearch/pytorch3d.git@cbcae096a0b9b04f7c515d11bb4285a82e96b8d7"
 ```
 
+## Data
+
+Download preprocessed AMA data from [DynoSurf](https://github.com/yaoyx689/DynoSurf)
+and arrange each sequence as:
+
+```text
+AMA/
+├── crane_0010/
+│   ├── gt/
+│   ├── pcl_seqs/
+│   └── points_clouds/
+└── crane_0027/
+    └── ...
+```
+
 ## Run
 
-Activate the environment and run from the repository root with preprocessed AMA:
+With the `neupig` environment active, run from the repository root:
 
 ```bash
 OMP_NUM_THREADS=8 python -u Main.py \
     --methodConfig configs/method/fit_.json \
     --directory_path ~/AMA \
     --out_path results/ama \
-    --devices 0 \
-    --target obj \
-    --number_points 5000 \
-    --seed 0
+    --devices 0
 ```
 
-This processes all sequence directories under `~/AMA`, including initialization,
-optimization, output, and evaluation. Results are written to a timestamped directory
-under `results/ama`. Set the update count with `optimization.epochs` in the method
-config (1,000 by default). MLP compilation is enabled by default and reports its first preparation
-per worker in the terminal; the first use of a configuration can take longer.
-To save terminal output, append `2>&1 | tee run.log` to the command.
+This processes all sequences, including initialization, optimization, and evaluation.
+Outputs go to a timestamped directory under `results/ama`. Defaults: 1,000 epochs,
+5,000 points per frame, seed 0. Edit `optimization.epochs` in the method config to
+change the update count.
 
-The default dataset path is `~/AMA`. Use `python Main.py --help` for all options.
-`--devices` accepts multiple GPU IDs;
-`--target` accepts `obj` or `ply`. `--debug` runs the pipeline synchronously, and
-`--quiet` disables progress displays. Nonzero `--noise` is currently unsupported.
+First use builds CUDA extensions and compiles the MLP, adding startup time.
+Set `performance.compile_mlp` to `false` in the method config to disable compilation.
+Use `--devices 0 1` for multiple GPUs and `python Main.py --help` for other options.
 
-## PATH-STRUCTURE
-To download the preprocessed data, see the data section of [Dynosurf](https://github.com/yaoyx689/DynoSurf?tab=readme-ov-file).
-``` 
---AMA
-|
-|--crane_0010
-|-|
-|-|--gt
-|-|--pcl_seqs
-|-|--points_clouds
-|
-|--crane_0027
-|-|
-|-|--gt
-|-|--pcl_seqs
-|-|--points_clouds
-```
-
-## RUNS
-All run configs are predefined in configs/method/runs. For the ablation study see the configs/method/ablations path. Alter the path arguments accordingly [-o / -dp]. To create the extended AMA dataset, with sequences in the range of 40-120 frames, see `src/io/datasets/process_ama_dataset.py`.
-
-For the chained execution we supply the root-level `run.py` script. See the --help arguments for all the run/supplemental run options. We support multi-gpu runs, setting multiple gpu ids via --devices.
-
-To run the initialization methods from DynoSurf or Motion2VecSets, make sure to install their required packages. For Motion2VecSets, we recommend creating a separate conda environment with the appropriate Python version to avoid version conflicts. For the execution of DynoSurf, please refer to their [repository](https://github.com/yaoyx689/DynoSurf), or execute ```src/related_work/run_dynosurf.py```.
-Paths need to be altered according to your setup.
+Additional configs are in [configs/method](configs/method), including
+[ablations](configs/method/ablations) and [supplemental experiments](configs/method/supplemental).
+Use `python run.py --help` for experiment batches. Extended AMA preprocessing is in
+[src/io/datasets/process_ama_dataset.py](src/io/datasets/process_ama_dataset.py).
 
 ## Optimization performance
 
-The updated implementation uses separable grid solves, cached sampling operators
-and training inputs, exact spatial nearest neighbors, foreach Adam, fused geometry
-and edge-loss kernels, and CUDA graph replay. The model, losses, learning rates,
-point count, and epoch count are preserved. MLP compilation is enabled by default.
-
-Measured on the first ten AMA sequences in lexicographic order (nine `crane`
-sequences and `march1_0010`, rather than ten distinct subjects), with 1,000 epochs,
-5,000 points per frame, seed 0, eight CPU threads, and an NVIDIA RTX 5090
-(PyTorch 2.9.0+cu130, CUDA toolkit 13.1). The baseline is the original CVPR
-implementation preserved on `cvpr-state` (`97e9da0`):
+Same model, losses, learning rates, point count, and epoch count as the CVPR code.
+Measured on the first ten AMA sequences (nine `crane` sequences and `march1_0010`),
+with 1,000 epochs, 5,000 points per frame, seed 0, eight CPU threads, and RTX 5090.
 
 | Measure | Original (`cvpr-state`) | Current defaults (compiled MLP) |
 |---|---:|---:|
@@ -130,112 +106,17 @@ implementation preserved on `cvpr-state` (`97e9da0`):
 | Mean F-score (0.005) ↑ | 0.982574 | 0.984190 |
 | Peak allocated tensor memory ↓ | 998 MiB | 950 MiB |
 
-The CVPR baseline was measured in an earlier run; the current implementation was
-measured separately on the same machine using the same cached inputs and
-initialization. These are single-run timings rather than interleaved repeated
-measurements.
+Optimization-loop timings exclude loading, initialization, compilation, and evaluation.
+These are separate single-run measurements on the same machine with shared cached
+inputs and initialization, not repeated trials; small quality differences are not
+statistically established.
 
-Timing excludes loading, initialization, operator precomputation, MLP compilation,
-final prediction, and evaluation; it includes loss computation, backward, optimizer
-updates, and CUDA graph warmup/capture. Every variant performs 1,000 updates.
-Evaluation uses the same cached inputs and initialization, with 100,000 surface
-samples per frame. MLP preparation took 4.006 s across these ten compiled runs
-with compiler caches already populated. An earlier cold compilation trial required
-roughly 31 s outside the optimization loop; first-use startup can exceed the loop
-savings. Full-call timings also depend on CUDA extension build caches.
-
-Average metrics improved slightly, but these single-seed results do not establish
-statistical significance. Compared with `cvpr-state`, Chamfer-L2 improved on nine
-sequences and regressed on one (`crane_0129`, a 5.03% increase).
-Equivalent formulas and different GPU arithmetic can change training trajectories;
-compilation also changes BF16 rounding near activation boundaries.
-
-### Configuration
-
-The spatial and optimization CUDA extensions compile on first use and require `ninja`, a C++ compiler,
-and a CUDA toolkit compatible with PyTorch (`CUDA_HOME` if needed). The environment
-above was used for benchmarking and testing; a fresh environment installation
-has not been independently repeated. BF16 requires a compatible GPU.
-
-Optional top-level `performance` settings in a method config control the fast paths.
-To use native pcgrid and PyTorch3D KNN, set `separable_grid`, `spatial_knn`, and
-`cuda_graph` to `false`. Non-CG solver configurations also retain native pcgrid.
-Adam uses the `foreach` backend by default for both the MLP and fast grids;
-`performance.adam_backend` also accepts `fused` or `single`. The legacy
-`fused_adam` flag remains supported when `adam_backend` is absent.
-Dense sampling caches default to at most 4,096 nodes per level and a 256 MiB budget
-per grid wrapper (`dense_grid_max_nodes` and `dense_grid_budget_mb`).
-
-`mlp_precision` and `grid_precision` independently accept `fp32`, `fp16`, or `bf16`.
-Defaults are BF16 for the MLP and FP32 for grids. Master parameters, Adam state,
-geometry, interpolation, and losses stay FP32. The optional
-`configs/method/precision/fp16.json` enables FP16 for both components, which saved
-2.36% optimization time and 7.38% peak allocated tensor memory in an earlier paired
-ten-sequence run before the latest runtime changes. FP16 uses fixed loss scaling
-(default `loss_scale: 128`), requires the fast grid backend, and does not skip
-updates on overflow.
-
-The default CUDA path also fuses quaternion vertex transformation and edge loss,
-precomputes fixed interpolation stencils for uncached grid levels, and reuses the
-fixed target's query ordering. These preserve the mathematical model and exact
-nearest-neighbor search. Disable individual paths with `fused_geometry`,
-`fused_edge_loss`, `fixed_grid_sampling`, or `reuse_knn_query_order` under `performance`.
-The specialized kernels support first derivatives. Other rotation modes use the
-general geometry path; grid coordinates requiring gradients use general sampling.
-
-Selective MLP compilation is enabled by default with `max-autotune`. The terminal
-(and captured stdout logs) reports the first preparation per worker and its elapsed
-time when the MLP is ready. Later preparations are reported only if they take at
-least one second. Compatible cached kernels are reused. To disable compilation,
-set `performance.compile_mlp` to `false`. The default settings can also be written
-explicitly in a method config:
-
-```json
-{
-    "performance": {
-        "compile_mlp": true,
-        "compile_mlp_mode": "max-autotune"
-    }
-}
-```
-
-`compile_mlp_mode` accepts `default` or `max-autotune`. Compilation buckets vertex
-counts internally (default `compile_vertex_bucket: 128`), then removes padded
-outputs before geometry and losses. It warms up forward/backward without optimizer
-updates before timing and CUDA graph capture. Compilation and warmup costs are
-reported separately as `mlp_preparation_seconds` and remain included in the full
-optimizer call time; first-use costs can outweigh training savings on short jobs.
-
-### Benchmarks and tests
-
-Run from the repository root with preprocessed AMA data:
+## Benchmarks and tests
 
 ```bash
-# Optimization only; --profile-epochs 0 skips the separate diagnostic trace.
-python scripts/benchmark_optimization.py --dataset ~/AMA --limit 10
-
-# Runtime and evaluation comparison against the original CVPR implementation.
-git fetch origin
-python scripts/compare_optimization.py --dataset ~/AMA --root results/comparison \
-    --label baseline --reference --freeze-reference --reference-revision origin/cvpr-state \
-    --limit 10 --epochs 1000
-python scripts/compare_optimization.py --dataset ~/AMA --root results/comparison \
-    --label compiled --limit 10 --epochs 1000
-
-# Optional comparison without compilation. --performance accepts the performance
-# object alone, rather than a full method config.
-printf '%s\n' '{"compile_mlp": false}' > results/comparison/eager.json
-python scripts/compare_optimization.py --dataset ~/AMA --root results/comparison \
-    --label eager --limit 10 --epochs 1000 --performance results/comparison/eager.json
-
-# Independent MLP/grid precision experiments and kernel tests.
-python scripts/precision_sweep.py --dataset ~/AMA --input-cache-root results/comparison
+python scripts/benchmark_optimization.py --dataset ~/AMA --limit 10 --profile-epochs 0
 python -m unittest discover -s tests -v
 ```
 
-The paired runner adds timing hooks to the original source and shares cached inputs,
-templates, and RNG states between variants. Evaluation runs outside the optimization
-timer; `--skip-evaluation` disables it. Results and caches are written under `results/`
-and excluded from Git. Use a new root for each experiment and a new label for each
-run; snapshots and existing results are not overwritten. Load only locally generated
-caches. Run GPU benchmarks sequentially to avoid contention.
+See [Performance and benchmarking](docs/performance.md) for the CVPR comparison
+commands, configuration switches, precision options, and measurement details.
